@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 // Garantiza que exista un administrador para poder entrar por primera vez.
 export function asegurarAdmin() {
   if (db.prepare("SELECT 1 FROM usuarios WHERE rol='admin'").get()) return;
+  if (process.env.NODE_ENV === 'production' && !process.env.ADMIN_PASSWORD) throw new Error('Define ADMIN_PASSWORD antes de iniciar en producción');
   const clave = process.env.ADMIN_PASSWORD || 'admin123';
   db.prepare("INSERT INTO usuarios (nombre,usuario,clave_hash,rol) VALUES ('Administrador','admin',?, 'admin')").run(hashClave(clave));
-  console.log(`Usuario inicial creado -> usuario: admin  contraseña: ${clave}  (cámbiala al entrar)`);
+  console.log(process.env.ADMIN_PASSWORD ? 'Usuario inicial creado: admin (contraseña de ADMIN_PASSWORD)' : `Usuario inicial creado -> usuario: admin  contraseña: ${clave}  (cámbiala al entrar)`);
 }
 
 // Datos de ejemplo para demostración: npm run seed

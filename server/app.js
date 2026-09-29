@@ -18,6 +18,8 @@ const r2 = (x) => Math.round(x * 100) / 100;
 
 export function crearApp() {
   const app = express();
+  app.set('trust proxy', 1);
+  app.disable('x-powered-by');
   app.use(express.json({ limit: '2mb' }));
   const api = express.Router();
   app.use('/api', api);

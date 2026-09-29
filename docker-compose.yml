@@ -1,0 +1,41 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?defínelo en .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?defínelo en .env}
+      TZ_NEGOCIO: ${TZ_NEGOCIO:-America/Bogota}
+    volumes:
+      - datos:/data
+    expose: ["3000"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [app]
+    ports: ["80:80", "443:443"]
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?defínelo en .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data
+      - caddy_config:/config
+
+  # Copia diaria de la base de datos (se conservan las últimas 14)
+  respaldo:
+    build: .
+    restart: unless-stopped
+    depends_on: [app]
+    volumes:
+      - datos:/data
+      - ./respaldos:/respaldos
+    environment:
+      BACKUP_DIR: /respaldos
+    command: ["sh", "-c", "while true; do node server/backup.js; sleep 86400; done"]
+    user: root
+
+volumes:
+  datos:
+  caddy_datos:
+  caddy_config:

@@ -28,7 +28,7 @@ Primer ingreso: usuario `admin`, contraseña `admin123` (o la de `ADMIN_PASSWORD
 
 Variables de entorno: `PORT`, `DB_FILE` (por defecto `data/dulceria.db`), `JWT_SECRET`, `ADMIN_PASSWORD`, `TZ_NEGOCIO` (por defecto `America/Bogota`).
 
-Para usarla en el celular debe publicarse con HTTPS (para instalarla como app y compartir el PDF). Los datos viven en un único archivo SQLite: **haz copia de `data/dulceria.db` periódicamente**.
+Para publicarla con HTTPS en un servidor propio (Docker + Caddy, con copias diarias) sigue [DEPLOY.md](DEPLOY.md).
 
 ## Flujo de trabajo típico
 
