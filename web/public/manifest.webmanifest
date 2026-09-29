@@ -1,0 +1,10 @@
+{
+  "name": "Dulcería Ruta",
+  "short_name": "Dulcería",
+  "description": "Compras, inventario y ventas por ruta con remisiones",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff5f8",
+  "theme_color": "#d6336c",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

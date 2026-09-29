@@ -1,5 +1,6 @@
 node_modules
-data/*.db*
+web/node_modules
 web/dist
+data
+.git
 .env
-respaldos
