@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getUser, getToken, guardarSesion, login, get, useHash, sincronizar, useCola } from './lib.js';
-import { Toaster, Campo, useAccion, toast } from './ui.jsx';
+import { Toaster, Campo, useAccion, toast, VisorPdf } from './ui.jsx';
 import { Inicio } from './pages/Inicio.jsx';
 import Vender from './pages/Vender.jsx';
 import { Remisiones, RemisionDetalle } from './pages/Remisiones.jsx';
@@ -70,6 +70,7 @@ export default function App() {
       {online && pendientes.length > 0 && <div className="banner off">Enviando {pendientes.length} operación(es) pendientes…</div>}
       {page}
       <nav className="tabs">{tabs.map(([to, ic, t]) => <a key={t} href={`#/${to}`} className={activo === to ? 'on' : ''}><b>{ic}</b>{t}</a>)}</nav>
+      <VisorPdf cfg={cfg} />
       <Toaster />
     </>
   );

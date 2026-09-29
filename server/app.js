@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { db, tx, ahora, HttpError, moverStock, getStock, getConfig } from './db.js';
 import { requireAuth, soloAdmin, firmar, hashClave, verificarClave } from './auth.js';
-import { remisionPdf } from './pdf.js';
+import { remisionPdf, remisionTicket } from './pdf.js';
 
 const wrap = (fn) => (req, res, next) => { try { Promise.resolve(fn(req, res)).catch(next); } catch (e) { next(e); } };
 const n = (v) => (v === undefined || v === '' ? null : v);
@@ -355,7 +355,8 @@ export function crearApp() {
     const r = cargarRemision(req, req.params.id);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="remision-${r.consecutivo}.pdf"`);
-    remisionPdf(r, getConfig()).pipe(res);
+    // ?formato=carta para hoja completa; por defecto ticket angosto, legible en el celular
+    (req.query.formato === 'carta' ? remisionPdf : remisionTicket)(r, getConfig()).pipe(res);
   }));
   api.post('/remisiones/:id/anular', wrap((req, res) => {
     tx(() => {

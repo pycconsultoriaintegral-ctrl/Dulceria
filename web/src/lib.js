@@ -137,7 +137,13 @@ export async function compartirRemision(r, cfg) {
   const tel = telWhatsApp(r.telefono);
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`, '_blank');
 }
-export async function abrirPdf(r) {
-  const pdf = await blob(`/remisiones/${r.id}/pdf`);
-  window.open(URL.createObjectURL(pdf), '_blank');
+// Abre el visor de remisión dentro de la app (lo pinta <VisorPdf/> en App.jsx)
+export function abrirPdf(r) { window.dispatchEvent(new CustomEvent('ver-pdf', { detail: r })); }
+export async function descargarPdf(r, cfg, formato = 'ticket') {
+  const pdf = await blob(`/remisiones/${r.id}/pdf?formato=${formato}`);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(pdf);
+  a.download = `remision-${numRem(cfg, r.consecutivo)}${formato === 'carta' ? '-carta' : ''}.pdf`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }

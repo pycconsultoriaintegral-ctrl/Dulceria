@@ -68,3 +68,79 @@ export function remisionPdf(r, cfg) {
   doc.end();
   return doc;
 }
+
+// ---------- Formato ticket (80 mm de ancho, una sola página de alto variable) ----------
+// Se lee bien en el celular sin hacer zoom y sirve para impresoras térmicas.
+const TW = 226.77; // 80 mm en puntos
+const M = 10;
+function dibujarTicket(doc, r, cfg) {
+  const W = TW - M * 2;
+  let y = M;
+  const centro = (txt, font, size, color = '#000') => {
+    doc.font(font).fontSize(size).fillColor(color).text(txt, M, y, { width: W, align: 'center' });
+    y = doc.y + 2;
+  };
+  const linea = () => { y += 3; doc.moveTo(M, y).lineTo(M + W, y).dash(2, { space: 2 }).strokeColor('#000').stroke().undash(); y += 6; };
+  const par = (a, b, bold = false, size = 9) => {
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(size).fillColor('#000');
+    doc.text(a, M, y, { width: W * 0.58 });
+    const h1 = doc.y;
+    doc.text(b, M + W * 0.58, y, { width: W * 0.42, align: 'right' });
+    y = Math.max(h1, doc.y) + 2;
+  };
+
+  centro(cfg.negocio, 'Helvetica-Bold', 13);
+  if (cfg.nit) centro(`NIT/CC: ${cfg.nit}`, 'Helvetica', 8, '#333');
+  if (cfg.direccion) centro(cfg.direccion, 'Helvetica', 8, '#333');
+  if (cfg.telefono) centro(`Tel: ${cfg.telefono}`, 'Helvetica', 8, '#333');
+  linea();
+  centro('REMISIÓN', 'Helvetica-Bold', 12);
+  centro(`No. ${cfg.prefijo || 'R'}-${String(r.consecutivo).padStart(6, '0')}`, 'Helvetica-Bold', 11);
+  if (r.anulada) centro('*** ANULADA ***', 'Helvetica-Bold', 12, '#c00');
+  centro(r.fecha.slice(0, 16), 'Helvetica', 8.5);
+  linea();
+  const dato = (k, v) => {
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#000').text(`${k}: `, M, y, { continued: true, width: W }).font('Helvetica').text(v || '-');
+    y = doc.y + 1;
+  };
+  dato('Cliente', `${r.cliente}${r.negocio ? ' - ' + r.negocio : ''}`);
+  if (r.cliente_direccion) dato('Dirección', r.cliente_direccion);
+  if (r.telefono) dato('Teléfono', r.telefono);
+  dato('Vendedor', r.vendedor);
+  dato('Ruta', r.ruta || 'Mostrador');
+  dato('Pago', r.tipo_pago === 'contado' ? 'Contado' : 'Crédito');
+  linea();
+  for (const i of r.items) {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#000').text(i.descripcion, M, y, { width: W });
+    y = doc.y;
+    par(`${qty(i.cantidad)} x ${money(i.precio)}`, money(i.cantidad * i.precio), false, 9);
+    y += 2;
+  }
+  linea();
+  par('Subtotal', money(r.subtotal));
+  if (r.descuento > 0) par('Descuento', '-' + money(r.descuento));
+  par('TOTAL', money(r.total), true, 12);
+  par('Pagado', money(r.pagado));
+  if (r.saldo > 0) par('Saldo remisión', money(r.saldo), true, 10);
+  if (r.saldo_cliente > 0) par('Saldo total cliente', money(r.saldo_cliente));
+  if (r.nota) { y += 4; doc.font('Helvetica-Oblique').fontSize(8.5).text(`Nota: ${r.nota}`, M, y, { width: W }); y = doc.y; }
+  y += 28;
+  doc.moveTo(M + 20, y).lineTo(M + W - 20, y).strokeColor('#000').stroke();
+  y += 3;
+  doc.font('Helvetica').fontSize(8).fillColor('#000').text('Recibido conforme (nombre y firma)', M, y, { width: W, align: 'center' });
+  y = doc.y + 8;
+  if (cfg.pie_remision) { doc.font('Helvetica').fontSize(7.5).fillColor('#555').text(cfg.pie_remision, M, y, { width: W, align: 'center' }); y = doc.y; }
+  return y + M;
+}
+
+export function remisionTicket(r, cfg) {
+  // 1.ª pasada: mide el alto en un documento desechable; 2.ª: documento real con ese alto
+  const medidor = new PDFDocument({ size: [TW, 20000], margin: 0 });
+  medidor.on('data', () => {});
+  const alto = Math.ceil(dibujarTicket(medidor, r, cfg));
+  medidor.end();
+  const doc = new PDFDocument({ size: [TW, alto], margin: 0 });
+  dibujarTicket(doc, r, cfg);
+  doc.end();
+  return doc;
+}

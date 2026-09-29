@@ -142,7 +142,7 @@ function Listo({ hecho, cliente, cfg, onNueva }) {
       <p className="mut">{cliente?.nombre}</p>
       <div style={{ display: 'grid', gap: 10 }}>
         <button className="btn" disabled={ocupado} onClick={() => run(async () => compartirRemision((await get(`/remisiones/${hecho.id}`)), cfg))}>Compartir por WhatsApp</button>
-        <button className="btn sec" disabled={ocupado} onClick={() => run(() => abrirPdf(r))}>Ver / descargar PDF</button>
+        <button className="btn sec" disabled={ocupado} onClick={() => run(() => abrirPdf(r))}>Ver remisión (PDF)</button>
         <button className="btn gris" onClick={onNueva}>Nueva venta</button>
         <button className="btn gris" onClick={() => ir('/remisiones')}>Ver remisiones</button>
       </div></div></main></>
