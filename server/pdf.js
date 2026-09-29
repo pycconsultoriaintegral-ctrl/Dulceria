@@ -27,24 +27,29 @@ export function remisionPdf(r, cfg) {
 
   y += 72;
   const cols = [L + 6, L + 60, L + 350, L + 430];
-  doc.rect(L, y, W, 18).fill('#eee').fillColor('#000');
-  doc.font('Helvetica-Bold').fontSize(9)
-    .text('Cant.', cols[0], y + 5).text('Descripción', cols[1], y + 5)
-    .text('Precio', cols[2], y + 5, { width: 70, align: 'right' }).text('Total', cols[3], y + 5, { width: 90, align: 'right' });
-  y += 22;
+  const encabezado = () => {
+    doc.rect(L, y, W, 18).fill('#eee').fillColor('#000');
+    doc.font('Helvetica-Bold').fontSize(9)
+      .text('Cant.', cols[0], y + 5).text('Descripción', cols[1], y + 5)
+      .text('Precio', cols[2], y + 5, { width: 70, align: 'right' }).text('Total', cols[3], y + 5, { width: 90, align: 'right' });
+    y += 22;
+  };
+  encabezado();
   doc.font('Helvetica').fontSize(9);
   for (const i of r.items) {
-    if (y > 660) { doc.addPage(); y = 40; }
-    doc.text(qty(i.cantidad), cols[0], y).text(i.descripcion, cols[1], y, { width: 285 })
+    // la descripción puede ocupar varias líneas: la fila crece en consecuencia
+    const alto = Math.max(16, doc.heightOfString(i.descripcion, { width: 280 }) + 6);
+    if (y + alto > 660) { doc.addPage(); y = 40; encabezado(); doc.font('Helvetica').fontSize(9); }
+    doc.text(qty(i.cantidad), cols[0], y).text(i.descripcion, cols[1], y, { width: 280 })
       .text(money(i.precio), cols[2], y, { width: 70, align: 'right' }).text(money(i.cantidad * i.precio), cols[3], y, { width: 90, align: 'right' });
-    y += 16;
+    y += alto;
     doc.moveTo(L, y - 3).lineTo(L + W, y - 3).strokeColor('#eee').stroke();
   }
 
   y += 8;
   const fila = (label, valor, bold) => {
     doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 11 : 9.5)
-      .text(label, L + 330, y, { width: 100, align: 'right' }).text(valor, L + 430, y, { width: 90, align: 'right' });
+      .text(label, L + 230, y, { width: 190, align: 'right' }).text(valor, L + 430, y, { width: 90, align: 'right' });
     y += bold ? 18 : 15;
   };
   fila('Subtotal:', money(r.subtotal));
