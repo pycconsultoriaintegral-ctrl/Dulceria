@@ -49,7 +49,7 @@ export function RemisionDetalle({ id, user, cfg }) {
               <div className="right" style={{ marginTop: 8 }}>
                 {r.descuento > 0 && <div className="mut">Descuento -{money(r.descuento)}</div>}
                 <div className="big">{money(r.total)}</div>
-                <div className="mut">Pagado {money(r.pagado)} · Saldo {money(r.saldo)} · {r.tipo_pago}</div>
+                {!r.anulada && <div className="mut">Pagado {money(r.pagado)} · Saldo {money(r.saldo)} · {r.tipo_pago}</div>}
               </div>
               {r.nota && <div className="mut">Nota: {r.nota}</div>}
             </div>
