@@ -55,9 +55,9 @@ export function remisionPdf(r, cfg) {
   fila('Subtotal:', money(r.subtotal));
   if (r.descuento > 0) fila('Descuento:', '-' + money(r.descuento));
   fila('TOTAL:', money(r.total), true);
-  fila('Pagado:', money(r.pagado));
-  if (r.saldo > 0) fila('Saldo de esta remisión:', money(r.saldo), true);
-  if (r.saldo_cliente > 0) fila('Saldo total del cliente:', money(r.saldo_cliente));
+  if (!r.anulada) fila('Pagado:', money(r.pagado));
+  if (!r.anulada && r.saldo > 0) fila('Saldo de esta remisión:', money(r.saldo), true);
+  if (!r.anulada && r.saldo_cliente > 0) fila('Saldo total del cliente:', money(r.saldo_cliente));
   if (r.nota) { y += 6; doc.font('Helvetica-Oblique').fontSize(9).text(`Nota: ${r.nota}`, L, y, { width: 300 }); }
 
   y = Math.max(y + 40, 600);
@@ -120,9 +120,9 @@ function dibujarTicket(doc, r, cfg) {
   par('Subtotal', money(r.subtotal));
   if (r.descuento > 0) par('Descuento', '-' + money(r.descuento));
   par('TOTAL', money(r.total), true, 12);
-  par('Pagado', money(r.pagado));
-  if (r.saldo > 0) par('Saldo remisión', money(r.saldo), true, 10);
-  if (r.saldo_cliente > 0) par('Saldo total cliente', money(r.saldo_cliente));
+  if (!r.anulada) par('Pagado', money(r.pagado));
+  if (!r.anulada && r.saldo > 0) par('Saldo remisión', money(r.saldo), true, 10);
+  if (!r.anulada && r.saldo_cliente > 0) par('Saldo total cliente', money(r.saldo_cliente));
   if (r.nota) { y += 4; doc.font('Helvetica-Oblique').fontSize(8.5).text(`Nota: ${r.nota}`, M, y, { width: W }); y = doc.y; }
   y += 28;
   doc.moveTo(M + 20, y).lineTo(M + W - 20, y).strokeColor('#000').stroke();
