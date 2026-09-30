@@ -14,15 +14,21 @@ function Login({ onOk }) {
   const [u, setU] = useState(''); const [c, setC] = useState('');
   const [ocupado, run] = useAccion();
   return (
-    <main style={{ paddingTop: 60 }}>
-      <div className="center"><div style={{ fontSize: 56 }}>🍬</div><h1 style={{ color: 'var(--rosa-o)' }}>Dulcería Ruta</h1><p className="mut">Ventas, inventario y remisiones</p></div>
-      <form className="card" onSubmit={(e) => { e.preventDefault(); run(async () => { const r = await login(u, c); guardarSesion(r.token, r.user); onOk(r.user); }); }}>
-        <Campo label="Usuario" autoCapitalize="none" autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} />
-        <Campo label="Contraseña" type="password" autoComplete="current-password" value={c} onChange={(e) => setC(e.target.value)} />
-        <button className="btn block" disabled={ocupado}>Entrar</button>
-      </form>
+    <div className="login">
+      <div className="hero">
+        <div className="logo">🍬</div>
+        <h1>Dulcería Ruta</h1>
+        <p>Ventas, inventario y remisiones</p>
+      </div>
+      <main>
+        <form className="card" onSubmit={(e) => { e.preventDefault(); run(async () => { const r = await login(u, c); guardarSesion(r.token, r.user); onOk(r.user); }); }}>
+          <Campo label="Usuario" autoCapitalize="none" autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} />
+          <Campo label="Contraseña" type="password" autoComplete="current-password" value={c} onChange={(e) => setC(e.target.value)} />
+          <button className="btn block" disabled={ocupado}>Entrar</button>
+        </form>
+      </main>
       <Toaster />
-    </main>
+    </div>
   );
 }
 

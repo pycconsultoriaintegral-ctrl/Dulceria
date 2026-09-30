@@ -81,7 +81,7 @@ export function VisorPdf({ cfg }) {
   }, [r]);
   if (!r) return null;
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: '#e9e2e5', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: '#e6ebf5', display: 'flex', flexDirection: 'column' }}>
       <header className="top">
         <button onClick={() => setR(null)} aria-label="Cerrar">‹</button>
         <h1>Remisión</h1>
