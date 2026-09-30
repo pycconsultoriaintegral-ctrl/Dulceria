@@ -55,7 +55,7 @@ export function RemisionDetalle({ id, user, cfg }) {
             </div>
             <div style={{ display: 'grid', gap: 10 }}>
               <button className="btn" disabled={ocupado} onClick={() => run(() => compartirRemision(r, cfg))}>Compartir por WhatsApp</button>
-              <button className="btn sec" disabled={ocupado} onClick={() => run(() => abrirPdf(r))}>Ver / descargar PDF</button>
+              <button className="btn sec" disabled={ocupado} onClick={() => run(() => abrirPdf(r))}>Ver remisión (PDF)</button>
               {r.saldo > 0 && !r.anulada && <button className="btn sec" onClick={() => ir(`/clientes/${r.cliente_id}`)}>Registrar abono</button>}
               {!r.anulada && <button className="btn peligro" disabled={ocupado} onClick={() => {
                 const motivo = window.prompt('Motivo de la anulación (el inventario vuelve a la ruta y los pagos se reversan):');
