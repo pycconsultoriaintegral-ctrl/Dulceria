@@ -24,7 +24,7 @@ npm run seed         # (opcional) datos de demostración
 npm start            # http://localhost:3000
 ```
 
-Primer ingreso: usuario `admin`, contraseña `admin123` (o la de `ADMIN_PASSWORD`). **Cámbiala en Más → Cambiar contraseña.** Con `npm run seed` también se crea el vendedor `carlos / carlos123`.
+Primer ingreso: usuario `admin`, contraseña `admin123` (o la de `ADMIN_PASSWORD`). **Cámbiala en Más → Cambiar contraseña.** Con `npm run seed` también se crea el vendedor `freddy / freddy123`.
 
 Variables de entorno: `PORT`, `DB_FILE` (por defecto `data/dulceria.db`), `JWT_SECRET`, `ADMIN_PASSWORD`, `TZ_NEGOCIO` (por defecto `America/Bogota`).
 

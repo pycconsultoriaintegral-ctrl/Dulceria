@@ -4,7 +4,7 @@
   "description": "Compras, inventario y ventas por ruta con remisiones",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fff5f8",
-  "theme_color": "#d6336c",
+  "background_color": "#f3f6fc",
+  "theme_color": "#0b2a6f",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }
