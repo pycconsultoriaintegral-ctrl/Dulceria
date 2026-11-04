@@ -1,8 +1,9 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { iniciar } from './ayuda.js';
 
 const { server, call, login } = await iniciar();
+after(() => server.close()); // siempre se cierra, aunque una prueba falle
 
 test('flujo completo: compra -> cargue -> venta -> abono -> cierre -> anulación -> reportes', async () => {
   const admin = await login('admin', 'admin123');
@@ -40,13 +41,20 @@ test('flujo completo: compra -> cargue -> venta -> abono -> cierre -> anulación
   assert.equal(inv.en_rutas, 25);
   assert.equal((await call('GET', `/inventario?ub=R${ruta}`, null, vend)).body.productos[0].cantidad, 25);
 
+  // una venta pagada por transferencia suma al cobrado pero no al efectivo que se entrega
+  assert.equal((await call('POST', '/remisiones', { cliente_id: cli, tipo_pago: 'contado', metodo: 'transferencia', items: [{ producto_id: prod, cantidad: 1 }] }, vend)).body.total, 1200);
+  assert.equal((await call('POST', '/remisiones', { cliente_id: cli, tipo_pago: 'contado', metodo: 'cripto', items: [{ producto_id: prod, cantidad: 1 }] }, vend)).status, 400);
   const cierre = (await call('GET', '/cierre', null, vend)).body;
-  assert.equal(cierre.ventas_total, 18000);
-  assert.equal(cierre.cobrado, 2000 + 6000 + 4000);
+  assert.equal(cierre.ventas_total, 19200);
+  assert.equal(cierre.cobrado, 2000 + 6000 + 4000 + 1200);
+  assert.equal(cierre.cobrado_efectivo, 2000 + 6000 + 4000);
+  assert.equal(cierre.transferencias, 1200);
+  assert.equal(cierre.esperado, 12000);
   await call('POST', '/gastos', { concepto: 'Gasolina', valor: 3000 }, vend);
   const c2 = (await call('POST', '/cierre', { entregado: 9000 }, vend)).body;
-  assert.equal(c2.esperado, 9000);
+  assert.equal(c2.esperado, 9000); // 12000 de efectivo - 3000 de gasolina; la transferencia no se entrega
   assert.equal(c2.cierre.diferencia, 0);
+  assert.equal(c2.cierre.transferencias, 1200);
 
   const pdf = await call('GET', `/remisiones/${v1.id}/pdf`, null, vend);
   assert.equal(pdf.body.subarray(0, 4).toString(), '%PDF');
@@ -55,9 +63,10 @@ test('flujo completo: compra -> cargue -> venta -> abono -> cierre -> anulación
 
   assert.equal((await call('POST', `/remisiones/${v1.id}/anular`, { motivo: 'error' }, vend)).status, 200);
   assert.equal((await call('GET', `/clientes/${cli}`, null, vend)).body.saldo, 0);
-  assert.equal((await call('GET', `/inventario?ub=R${ruta}`, null, admin)).body.productos[0].cantidad, 35);
+  assert.equal((await call('GET', `/inventario?ub=R${ruta}`, null, admin)).body.productos[0].cantidad, 34); // 25 - 1 (transferencia) + 10 de la anulada
   const rep2 = (await call('GET', '/reportes/resumen', null, admin)).body;
-  assert.equal(rep2.ventas, 6000);
+  assert.equal(rep2.ventas, 7200); // 5 de contado + 1 por transferencia
+  assert.equal(rep2.cobrado_transferencia, 1200);
+  assert.equal(rep2.cobrado_efectivo, 6000);
   assert.equal((await call('GET', '/reportes/resumen', null, vend)).status, 403);
-  server.close();
 });

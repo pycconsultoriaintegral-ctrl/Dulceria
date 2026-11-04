@@ -165,8 +165,11 @@ function calcularCierre(fecha, punto) {
   const ventas = db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(total),0) AS total, COALESCE(SUM(CASE WHEN tipo_pago='contado' THEN total ELSE 0 END),0) AS contado,
     COALESCE(SUM(CASE WHEN tipo_pago='credito' THEN total ELSE 0 END),0) AS credito
     FROM remisiones r WHERE r.anulada=0 AND ${cp('r')} AND substr(r.fecha,1,10)=?`).get(fecha);
-  // Todo el dinero recibido ese día: ventas de contado + abonos + abonos iniciales
-  const cobrado = db.prepare(`SELECT COALESCE(SUM(valor),0) AS v FROM pagos p WHERE p.anulado=0 AND ${cp('p')} AND substr(p.fecha,1,10)=?`).get(fecha).v;
+  // Dinero recibido ese día (ventas de contado + abonos + abonos iniciales), separado por método de pago.
+  // Solo el efectivo se entrega en el cierre; las transferencias ya están en la cuenta del negocio.
+  const cobro = db.prepare(`SELECT COALESCE(SUM(CASE WHEN metodo='efectivo' THEN valor END),0) AS efectivo,
+    COALESCE(SUM(CASE WHEN metodo<>'efectivo' THEN valor END),0) AS transferencias FROM pagos p
+    WHERE p.anulado=0 AND ${cp('p')} AND substr(p.fecha,1,10)=?`).get(fecha);
   const abonos = db.prepare(`SELECT COALESCE(SUM(p.valor),0) AS v FROM pagos p JOIN remisiones r ON r.id=p.remision_id
     WHERE p.anulado=0 AND ${cp('p')} AND substr(p.fecha,1,10)=? AND substr(r.fecha,1,10)<>?`).get(fecha, fecha).v;
   const gastos = db.prepare(`SELECT COALESCE(SUM(valor),0) AS v FROM gastos g WHERE ${cp('g')} AND substr(g.fecha,1,10)=?`).get(fecha).v;
@@ -175,8 +178,9 @@ function calcularCierre(fecha, punto) {
   const guardado = db.prepare('SELECT * FROM cierres WHERE fecha=? AND punto=?').get(fecha, punto.codigo);
   return {
     fecha, punto: punto.codigo, ruta_id: punto.ruta_id, bodega_id: punto.bodega_id, remisiones: ventas.n, ventas_total: r2(ventas.total),
-    ventas_contado: r2(ventas.contado), ventas_credito: r2(ventas.credito), cobrado: r2(cobrado), abonos: r2(abonos), gastos: r2(gastos), lista_gastos,
-    esperado: r2(cobrado - gastos), inventario, cierre: guardado ?? null,
+    ventas_contado: r2(ventas.contado), ventas_credito: r2(ventas.credito), cobrado: r2(cobro.efectivo + cobro.transferencias),
+    cobrado_efectivo: r2(cobro.efectivo), transferencias: r2(cobro.transferencias), abonos: r2(abonos), gastos: r2(gastos), lista_gastos,
+    esperado: r2(cobro.efectivo - gastos), inventario, cierre: guardado ?? null,
   };
 }
 router.get('/cierre', wrap((req, res) => res.json(calcularCierre(req.query.fecha || ahora().slice(0, 10), resolverPunto(req.user, req.query.punto)))));
@@ -185,10 +189,10 @@ router.post('/cierre', wrap((req, res) => {
   const fecha = req.body.fecha || ahora().slice(0, 10);
   const c = calcularCierre(fecha, punto);
   const entregado = num(req.body.entregado, 'Efectivo entregado');
-  db.prepare(`INSERT INTO cierres (fecha,punto,ruta_id,bodega_id,usuario_id,ventas_contado,abonos,gastos,esperado,entregado,diferencia,nota) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(fecha,punto) DO UPDATE SET usuario_id=excluded.usuario_id, ventas_contado=excluded.ventas_contado, abonos=excluded.abonos, gastos=excluded.gastos,
-    esperado=excluded.esperado, entregado=excluded.entregado, diferencia=excluded.diferencia, nota=excluded.nota`)
-    .run(fecha, punto.codigo, punto.ruta_id, punto.bodega_id, req.user.id, c.ventas_contado, c.abonos, c.gastos, c.esperado, entregado, r2(entregado - c.esperado), n(req.body.nota));
+  db.prepare(`INSERT INTO cierres (fecha,punto,ruta_id,bodega_id,usuario_id,ventas_contado,abonos,transferencias,gastos,esperado,entregado,diferencia,nota) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(fecha,punto) DO UPDATE SET usuario_id=excluded.usuario_id, ventas_contado=excluded.ventas_contado, abonos=excluded.abonos, transferencias=excluded.transferencias,
+    gastos=excluded.gastos, esperado=excluded.esperado, entregado=excluded.entregado, diferencia=excluded.diferencia, nota=excluded.nota`)
+    .run(fecha, punto.codigo, punto.ruta_id, punto.bodega_id, req.user.id, c.ventas_contado, c.abonos, c.transferencias, c.gastos, c.esperado, entregado, r2(entregado - c.esperado), n(req.body.nota));
   res.json(calcularCierre(fecha, punto));
 }));
 

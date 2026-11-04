@@ -24,6 +24,8 @@ export function Reportes({ user }) {
               <Kpi l="Utilidad neta" v={money(d.utilidad_neta)} />
               <Kpi l="Compras" v={money(d.compras)} />
               <Kpi l="Inventario (costo)" v={money(d.valor_inventario)} />
+              <Kpi l="Cobrado en efectivo" v={money(d.cobrado_efectivo)} />
+              <Kpi l="Cobrado por transferencia" v={money(d.cobrado_transferencia)} />
               <Kpi l="Por cobrar (cartera)" v={money(d.cartera)} />
               <Kpi l="Por pagar" v={money(d.por_pagar)} />
             </div>

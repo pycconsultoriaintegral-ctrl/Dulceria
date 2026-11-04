@@ -30,8 +30,9 @@ export function Cierre({ user }) {
               <div className="row between mut"><span>· a crédito</span><span>{money(d.ventas_credito)}</span></div>
             </div>
             <div className="card">
-              <div className="row between"><span>Dinero cobrado hoy</span><b>{money(d.cobrado)}</b></div>
-              <div className="row between mut"><span>· incluye abonos de deudas anteriores</span><span>{money(d.abonos)}</span></div>
+              <div className="row between"><span>💵 Cobrado en efectivo</span><b>{money(d.cobrado_efectivo)}</b></div>
+              <div className="row between"><span>📲 Cobrado por transferencia</span><b>{money(d.transferencias)}</b></div>
+              <div className="row between mut"><span>· total cobrado (incluye abonos de deudas anteriores: {money(d.abonos)})</span><span>{money(d.cobrado)}</span></div>
               <div className="row between"><span>Gastos de ruta</span><b className="mal">-{money(d.gastos)}</b></div>
               {d.lista_gastos.map((g) => <div key={g.id} className="row between mut"><span>· {g.concepto}</span><span>{money(g.valor)}</span></div>)}
               <button className="btn sm sec" style={{ marginTop: 6 }} onClick={() => setGasto(true)}>+ Registrar gasto</button>

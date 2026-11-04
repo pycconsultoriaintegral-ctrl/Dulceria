@@ -1,8 +1,9 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { iniciar } from './ayuda.js';
 
 const { server, call, login } = await iniciar();
+after(() => server.close()); // siempre se cierra, aunque una prueba falle
 
 // Escenario: Bodega 1 (con Ruta Norte) y Bodega 2 (con Ruta Occidente y Ruta Sur), un encargado por bodega
 const ctx = {};
@@ -249,5 +250,4 @@ test('administración de bodegas: no se desactiva una bodega con rutas o inventa
   assert.equal(ub[0].rutas.length, 3);
   assert.equal((await call('GET', '/ubicaciones', null, admin)).body.bodegas.length, 2);
   assert.deepEqual((await call('GET', '/ubicaciones', null, ctx.vera)).body.bodegas.map((b) => b.rutas.map((r) => r.id)), [[rOcc]]);
-  server.close();
 });

@@ -55,7 +55,7 @@ export function ClienteDetalle({ id, user, cfg }) {
                 </div>))}
             </div>
             <div className="card"><h3>Pagos recientes</h3>
-              {c.pagos.length === 0 ? <div className="mut">Sin pagos</div> : c.pagos.map((p) => <div key={p.id} className="row between mut" style={{ padding: '4px 0', textDecoration: p.anulado ? 'line-through' : 'none' }}><span>{p.fecha.slice(0, 16)}</span><span>{money(p.valor)}</span></div>)}
+              {c.pagos.length === 0 ? <div className="mut">Sin pagos</div> : c.pagos.map((p) => <div key={p.id} className="row between mut" style={{ padding: '4px 0', textDecoration: p.anulado ? 'line-through' : 'none' }}><span>{p.fecha.slice(0, 16)} {p.metodo === 'transferencia' ? '📲' : '💵'}</span><span>{money(p.valor)}</span></div>)}
             </div>
           </>
         )}
