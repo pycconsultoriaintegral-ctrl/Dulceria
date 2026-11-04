@@ -5,6 +5,7 @@ import { soloAdmin } from '../auth.js';
 import { wrap } from '../util.js';
 import { leerObjetos, leerNumero, normalizar } from '../csv.js';
 import { aBase } from '../presentaciones.js';
+import { auditar } from '../auditoria.js';
 import { exigir, esAdminOBodeguero, puedeUb, puedeRuta, parseUb } from '../scope.js';
 
 const router = Router();
@@ -79,6 +80,7 @@ router.post('/productos', soloAdmin, wrap((req, res) => {
       }
     });
   }
+  if (req.body.aplicar) auditar(req.user, 'importar', 'productos', null, JSON.stringify(resumen(filas)));
   res.json({ aplicado: !!req.body.aplicar, resumen: resumen(filas), filas: filas.map(({ datos, ...x }) => x) });
 }));
 
@@ -146,6 +148,7 @@ router.post('/clientes', wrap((req, res) => {
       }
     });
   }
+  if (req.body.aplicar) auditar(req.user, 'importar', 'clientes', null, JSON.stringify(resumen(filas)));
   res.json({ aplicado: !!req.body.aplicar, resumen: resumen(filas), filas: filas.map(({ datos, ...x }) => x) });
 }));
 
@@ -194,6 +197,7 @@ router.post('/inventario', wrap((req, res) => {
       for (const f of filas) if (!f.error && f.accion === 'ajustar') moverStock({ productoId: f.producto_id, ubicacion: ub, delta: f.diferencia, tipo: 'ajuste', referencia: 'IMP', usuarioId: req.user.id, nota: 'Conteo importado' });
     });
   }
+  if (req.body.aplicar) auditar(req.user, 'importar', 'inventario', null, `${ub} · ${JSON.stringify(resumen(filas))}`);
   res.json({ aplicado: !!req.body.aplicar, resumen: resumen(filas), filas });
 }));
 
@@ -245,6 +249,7 @@ router.post('/presentaciones', soloAdmin, wrap((req, res) => {
       }
     });
   }
+  if (req.body.aplicar) auditar(req.user, 'importar', 'presentaciones', null, JSON.stringify(resumen(filas)));
   res.json({ aplicado: !!req.body.aplicar, resumen: resumen(filas), filas: filas.map(({ datos, ...x }) => x) });
 }));
 

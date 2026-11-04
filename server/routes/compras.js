@@ -4,6 +4,7 @@ import { db, tx, ahora, HttpError, moverStock } from '../db.js';
 import { soloAdmin } from '../auth.js';
 import { wrap, n, num, r2, entero } from '../util.js';
 import { presentacionDe, aBase } from '../presentaciones.js';
+import { auditar } from '../auditoria.js';
 import { B, esAdmin, esAdminOBodeguero, puedeBodega, exigir, getBodega } from '../scope.js';
 
 const router = Router();
@@ -75,6 +76,7 @@ router.post('/:id/anular', soloAdmin, wrap((req, res) => {
     for (const i of db.prepare('SELECT * FROM compra_items WHERE compra_id=?').all(c.id))
       moverStock({ productoId: i.producto_id, ubicacion: B(c.bodega_id), delta: -aBase(i.cantidad, { factor: i.factor }), tipo: 'anulacion_compra', costo: i.costo / i.factor, referencia: `C-${c.id}`, usuarioId: req.user.id });
     db.prepare('UPDATE compras SET anulada=1 WHERE id=?').run(c.id);
+    auditar(req.user, 'anular', 'compra', c.id, `$${c.total} · bodega ${c.bodega_id}`);
   });
   res.json({ ok: true });
 }));
@@ -85,6 +87,7 @@ router.post('/:id/pago', soloAdmin, wrap((req, res) => {
   const v = num(req.body.valor);
   if (v <= 0 || v > c.total - c.pagado + 0.001) throw new HttpError(400, 'Valor inválido: excede la deuda');
   db.prepare('UPDATE compras SET pagado=pagado+? WHERE id=?').run(v, c.id);
+  auditar(req.user, 'pago a proveedor', 'compra', c.id, `$${v}`);
   res.json({ ok: true });
 }));
 

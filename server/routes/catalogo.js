@@ -4,6 +4,7 @@ import { db, tx, HttpError, getConfig } from '../db.js';
 import { soloAdmin, hashClave } from '../auth.js';
 import { wrap, n, num, req_, entero } from '../util.js';
 import { presentacionesDe, guardarPresentaciones } from '../presentaciones.js';
+import { auditar, diferencias } from '../auditoria.js';
 import { B, R, getBodega, getRuta, ubicacionesPermitidas, esAdminOBodeguero, parseUb, puedeUb } from '../scope.js';
 
 const router = Router();
@@ -14,6 +15,7 @@ router.put('/config', soloAdmin, wrap((req, res) => {
   for (const k of ['negocio', 'nit', 'telefono', 'direccion', 'pie_remision', 'prefijo']) {
     if (req.body[k] !== undefined) db.prepare('INSERT INTO config (clave,valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor').run(k, String(req.body[k]));
   }
+  auditar(req.user, 'editar', 'config', null, 'Datos del negocio');
   res.json(getConfig());
 }));
 
@@ -28,8 +30,11 @@ router.get('/bodegas', (req, res) => {
 });
 router.post('/bodegas', soloAdmin, wrap((req, res) => {
   const nombre = req_(req.body.nombre, 'El nombre es obligatorio');
-  try { res.json({ id: Number(db.prepare('INSERT INTO bodegas (nombre,direccion) VALUES (?,?)').run(nombre, n(req.body.direccion)).lastInsertRowid) }); }
+  let id;
+  try { id = Number(db.prepare('INSERT INTO bodegas (nombre,direccion) VALUES (?,?)').run(nombre, n(req.body.direccion)).lastInsertRowid); }
   catch { throw new HttpError(409, 'Ya existe una bodega con ese nombre'); }
+  auditar(req.user, 'crear', 'bodega', id, nombre);
+  res.json({ id });
 }));
 router.put('/bodegas/:id', soloAdmin, wrap((req, res) => {
   const id = entero(req.params.id);
@@ -43,6 +48,7 @@ router.put('/bodegas/:id', soloAdmin, wrap((req, res) => {
     db.prepare('UPDATE bodegas SET nombre=COALESCE(?,nombre), direccion=COALESCE(?,direccion), activa=COALESCE(?,activa) WHERE id=?')
       .run(n(req.body.nombre), n(req.body.direccion), req.body.activa === undefined ? null : Number(req.body.activa), id);
   } catch { throw new HttpError(409, 'Ya existe una bodega con ese nombre'); }
+  auditar(req.user, 'editar', 'bodega', id, diferencias(b, { ...req.body, activa: req.body.activa === undefined ? undefined : Number(req.body.activa) }, ['nombre', 'direccion', 'activa']) || 'Sin cambios');
   res.json({ ok: true });
 }));
 
@@ -56,17 +62,22 @@ router.post('/rutas', soloAdmin, wrap((req, res) => {
   const nombre = req_(req.body.nombre, 'El nombre es obligatorio');
   const bodega = entero(req.body.bodega_id, 'Elige la bodega de la ruta');
   if (!getBodega(bodega)) throw new HttpError(400, 'La bodega no existe');
-  try { res.json({ id: Number(db.prepare('INSERT INTO rutas (nombre,bodega_id) VALUES (?,?)').run(nombre, bodega).lastInsertRowid) }); }
+  let id;
+  try { id = Number(db.prepare('INSERT INTO rutas (nombre,bodega_id) VALUES (?,?)').run(nombre, bodega).lastInsertRowid); }
   catch { throw new HttpError(409, 'Ya existe una ruta con ese nombre'); }
+  auditar(req.user, 'crear', 'ruta', id, `${nombre} (bodega ${bodega})`);
+  res.json({ id });
 }));
 router.put('/rutas/:id', soloAdmin, wrap((req, res) => {
   const id = entero(req.params.id);
-  if (!getRuta(id)) throw new HttpError(404, 'Ruta no encontrada');
+  const rutaAntes = getRuta(id);
+  if (!rutaAntes) throw new HttpError(404, 'Ruta no encontrada');
   if (req.body.bodega_id !== undefined && !getBodega(Number(req.body.bodega_id))) throw new HttpError(400, 'La bodega no existe');
   try {
     db.prepare('UPDATE rutas SET nombre=COALESCE(?,nombre), activa=COALESCE(?,activa), bodega_id=COALESCE(?,bodega_id) WHERE id=?')
       .run(n(req.body.nombre), req.body.activa === undefined ? null : Number(req.body.activa), n(req.body.bodega_id), id);
   } catch { throw new HttpError(409, 'Ya existe una ruta con ese nombre'); }
+  auditar(req.user, 'editar', 'ruta', id, diferencias(rutaAntes, { ...req.body, activa: req.body.activa === undefined ? undefined : Number(req.body.activa) }, ['nombre', 'bodega_id', 'activa']) || 'Sin cambios');
   res.json({ ok: true });
 }));
 
@@ -89,6 +100,7 @@ router.post('/usuarios', soloAdmin, wrap((req, res) => {
   try {
     const id = db.prepare('INSERT INTO usuarios (nombre,usuario,clave_hash,rol,ruta_id,bodega_id) VALUES (?,?,?,?,?,?)')
       .run(req_(b.nombre, 'El nombre es obligatorio'), usuario, hashClave(b.clave), b.rol, a.ruta_id, a.bodega_id).lastInsertRowid;
+    auditar(req.user, 'crear', 'usuario', Number(id), `${usuario} (${b.rol})`);
     res.json({ id: Number(id) });
   } catch (e) { if (e instanceof HttpError) throw e; throw new HttpError(409, 'Ese usuario ya existe'); }
 }));
@@ -102,10 +114,13 @@ router.put('/usuarios/:id', soloAdmin, wrap((req, res) => {
   if (id === req.user.id && (rol !== 'admin' || b.activo === 0)) throw new HttpError(409, 'No puedes quitarte el rol de administrador ni desactivarte a ti mismo');
   db.prepare('UPDATE usuarios SET nombre=COALESCE(?,nombre), rol=?, ruta_id=?, bodega_id=?, activo=COALESCE(?,activo) WHERE id=?')
     .run(n(b.nombre), rol, a.ruta_id, a.bodega_id, b.activo === undefined ? null : Number(b.activo), id);
+  let detalle = diferencias(actual, { nombre: b.nombre, rol, ruta_id: a.ruta_id, bodega_id: a.bodega_id, activo: b.activo === undefined ? undefined : Number(b.activo) }, ['nombre', 'rol', 'ruta_id', 'bodega_id', 'activo']);
   if (b.clave) {
     if (String(b.clave).length < 6) throw new HttpError(400, 'La contraseña debe tener al menos 6 caracteres');
-    db.prepare('UPDATE usuarios SET clave_hash=? WHERE id=?').run(hashClave(b.clave), id);
+    db.prepare('UPDATE usuarios SET clave_hash=? WHERE id=?').run(hashClave(b.clave), id); // sus sesiones abiertas dejan de valer
+    detalle = [detalle, 'contraseña restablecida'].filter(Boolean).join(' · ');
   }
+  auditar(req.user, 'editar', 'usuario', id, `${actual.usuario}: ${detalle || 'Sin cambios'}`);
   res.json({ ok: true });
 }));
 
@@ -133,6 +148,11 @@ function guardarProductoTx(req, id) {
   if (precio < 0 || costo < 0) throw new HttpError(400, 'Precio y costo no pueden ser negativos');
   const minimo = num(b.stock_minimo ?? 0, 'Stock mínimo');
   if (id) {
+    const antes = db.prepare('SELECT * FROM productos WHERE id=?').get(id);
+    if (!antes) throw new HttpError(404, 'Producto no encontrado');
+    const nuevos = { codigo: n(b.codigo), nombre, unidad: b.unidad || 'und', precio, costo, stock_minimo: minimo, activo: b.activo === undefined ? undefined : Number(b.activo) };
+    const cambios = diferencias(antes, nuevos, ['codigo', 'nombre', 'unidad', 'precio', 'costo', 'stock_minimo', 'activo']);
+    if (cambios) auditar(req.user, 'editar', 'producto', id, `${antes.nombre}: ${cambios}`);
     db.prepare('UPDATE productos SET codigo=?,nombre=?,unidad=?,precio=?,costo=?,stock_minimo=?,activo=COALESCE(?,activo) WHERE id=?')
       .run(n(b.codigo), nombre, b.unidad || 'und', precio, costo, minimo, b.activo === undefined ? null : Number(b.activo), id);
     guardarPresentaciones(id, b.presentaciones);
@@ -141,6 +161,7 @@ function guardarProductoTx(req, id) {
   const nuevo = Number(db.prepare('INSERT INTO productos (codigo,nombre,unidad,precio,costo,stock_minimo) VALUES (?,?,?,?,?,?)')
     .run(n(b.codigo), nombre, b.unidad || 'und', precio, costo, minimo).lastInsertRowid);
   guardarPresentaciones(nuevo, b.presentaciones);
+  auditar(req.user, 'crear', 'producto', nuevo, `${nombre} · precio ${precio} · costo ${costo}`);
   return nuevo;
 }
 router.post('/productos', soloAdmin, wrap((req, res) => res.json({ id: guardarProducto(req) })));

@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { db, tx, ahora, HttpError, moverStock } from '../db.js';
 import { wrap, n, num, entero } from '../util.js';
 import { presentacionDe, aBase, presentacionesDe } from '../presentaciones.js';
+import { auditar } from '../auditoria.js';
 import { B, getBodega, exigir, esAdminOBodeguero, puedeBodega } from '../scope.js';
 
 const router = Router();
@@ -69,6 +70,9 @@ router.post('/:id/recibir', wrap((req, res) => {
       if (rec > 0) moverStock({ productoId: i.producto_id, ubicacion: B(t.destino_id), delta: rec, tipo: 'traslado_entrada', referencia: `T-${id}`, usuarioId: req.user.id });
     }
     db.prepare("UPDATE traslados SET estado='recibido', usuario_recibe=?, fecha_recibo=? WHERE id=?").run(req.user.id, ahora(), id);
+    const faltantes = t.items.filter((i) => (recibidas.has(i.producto_id) ? recibidas.get(i.producto_id) : i.cantidad) < i.cantidad)
+      .map((i) => `${i.nombre}: faltan ${i.cantidad - (recibidas.get(i.producto_id) ?? i.cantidad)}`);
+    if (faltantes.length) auditar(req.user, 'traslado con faltante', 'traslado', id, `${t.origen} → ${t.destino} · ${faltantes.join(', ')}`);
   });
   res.json(cargar(req, id));
 }));
@@ -82,6 +86,7 @@ router.post('/:id/anular', wrap((req, res) => {
     if (t.estado !== 'enviado') throw new HttpError(409, `El traslado ya está ${t.estado}`);
     for (const i of t.items) moverStock({ productoId: i.producto_id, ubicacion: B(t.origen_id), delta: i.cantidad, tipo: 'anulacion_traslado', referencia: `T-${id}`, usuarioId: req.user.id });
     db.prepare("UPDATE traslados SET estado='anulado' WHERE id=?").run(id);
+    auditar(req.user, 'anular', 'traslado', id, `${t.origen} → ${t.destino}`);
   });
   res.json({ ok: true });
 }));

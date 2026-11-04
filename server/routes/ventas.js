@@ -6,6 +6,7 @@ import { wrap, n, num, r2, req_, entero, conPrefijo } from '../util.js';
 import { B, R, getRuta, resolverPunto, sqlAlcance, sqlPunto, exigir, puedeRuta, puedeBodega, puedeUb, parseUb } from '../scope.js';
 import { puedeVerCliente } from './clientes.js';
 import { presentacionDe, aBase, precioLista } from '../presentaciones.js';
+import { auditar } from '../auditoria.js';
 
 const router = Router();
 const METODOS = ['efectivo', 'transferencia'];
@@ -106,6 +107,7 @@ router.post('/remisiones/:id/anular', wrap((req, res) => {
       moverStock({ productoId: i.producto_id, ubicacion: ubDelPunto(r), delta: aBase(i.cantidad, { factor: i.factor }), tipo: 'anulacion_venta', costo: i.costo / i.factor, referencia: `R-${r.consecutivo}`, usuarioId: req.user.id, permitirNegativo: true });
     db.prepare('UPDATE remisiones SET anulada=1, motivo_anulacion=? WHERE id=?').run(motivo, r.id);
     db.prepare('UPDATE pagos SET anulado=1 WHERE remision_id=?').run(r.id);
+    auditar(req.user, 'anular', 'remision', r.id, `R-${r.consecutivo} · ${r.cliente} · $${r.total} · ${motivo}`);
   });
   res.json({ ok: true });
 }));
@@ -197,6 +199,8 @@ router.post('/cierre', wrap((req, res) => {
     ON CONFLICT(fecha,punto) DO UPDATE SET usuario_id=excluded.usuario_id, ventas_contado=excluded.ventas_contado, abonos=excluded.abonos, transferencias=excluded.transferencias,
     gastos=excluded.gastos, esperado=excluded.esperado, entregado=excluded.entregado, diferencia=excluded.diferencia, nota=excluded.nota`)
     .run(fecha, punto.codigo, punto.ruta_id, punto.bodega_id, req.user.id, c.ventas_contado, c.abonos, c.transferencias, c.gastos, c.esperado, entregado, r2(entregado - c.esperado), n(req.body.nota));
+  const diferencia = r2(entregado - c.esperado);
+  if (diferencia !== 0) auditar(req.user, 'cierre con diferencia', 'cierre', null, `${punto.codigo} · ${fecha} · esperado $${c.esperado} · entregado $${entregado} · diferencia $${diferencia}`);
   res.json(calcularCierre(fecha, punto));
 }));
 

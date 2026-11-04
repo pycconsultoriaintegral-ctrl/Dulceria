@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { get, post, put, enviar, uuid, money, useCarga, ir, numRem, telWhatsApp, useUbicaciones, puedeGestionar } from '../lib.js';
+import { get, post, put, enviar, uuid, money, useCarga, ir, numRem, telWhatsApp, useUbicaciones, puedeGestionar, descargarCsv } from '../lib.js';
 import { Header, Cargando, Vacio, Modal, Campo, toast, useAccion, SelectorPunto } from '../ui.jsx';
 import { NuevoCliente } from './Vender.jsx';
 
@@ -124,7 +124,8 @@ export function Cartera({ user }) {
       <Header titulo="Cartera" />
       <main>
         {user.rol !== 'vendedor' && <SelectorPunto bodegas={bodegas} value={punto} onChange={setPunto} label="Filtrar por" todos />}
-        <input className="q" placeholder="Buscar cliente…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="row"><input className="q grow" placeholder="Buscar cliente…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button className="btn sm sec" style={{ marginBottom: 10 }} onClick={() => descargarCsv(`/exportar/cartera${punto ? `?punto=${punto}` : ''}`, 'cartera').catch((e) => toast(e.message, true))} title="Descargar para Excel">⬇ Excel</button></div>
         {s.loading || s.error ? <Cargando s={s} /> : (
           <>
             <div className="card"><div className="mut">Total por cobrar{punto || q ? ' (filtrado)' : ''}</div><div className="big warn">{money(q ? lista.reduce((a, c) => a + c.saldo, 0) : s.data.total)}</div></div>

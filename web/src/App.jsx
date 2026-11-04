@@ -12,6 +12,7 @@ import { Reportes } from './pages/Reportes.jsx';
 import { Ajustes } from './pages/Ajustes.jsx';
 import { Traslados } from './pages/Traslados.jsx';
 import { Importar } from './pages/Importar.jsx';
+import { Actividad } from './pages/Actividad.jsx';
 import { Cierre } from './pages/Cierre.jsx';
 import { Mas } from './pages/Mas.jsx';
 
@@ -73,6 +74,7 @@ export default function App() {
     case 'productos': page = admin ? <Productos /> : sinAcceso; break;
     case 'compras': page = gestiona ? <Compras user={user} /> : sinAcceso; break;
     case 'reportes': page = gestiona ? <Reportes user={user} /> : sinAcceso; break;
+    case 'actividad': page = admin ? <Actividad /> : sinAcceso; break;
     case 'importar': page = gestiona ? <Importar user={user} /> : sinAcceso; break;
     case 'traslados': page = gestiona ? <Traslados user={user} /> : sinAcceso; break;
     case 'ajustes': page = admin ? <Ajustes cfgRefrescar={cargarCfg} /> : sinAcceso; break;
@@ -80,7 +82,7 @@ export default function App() {
     default: page = <Inicio {...p} />;
   }
   const tabs = [['', '🏠', 'Inicio'], ['vender', '🛒', 'Vender'], ['remisiones', '🧾', 'Remisiones'], ['clientes', '👥', 'Clientes'], ['inventario', '📦', 'Inventario'], ['mas', '☰', 'Más']];
-  const activo = ['productos', 'compras', 'reportes', 'ajustes', 'cartera', 'cierre', 'traslados', 'importar'].includes(base) ? 'mas' : base || '';
+  const activo = ['productos', 'compras', 'reportes', 'ajustes', 'cartera', 'cierre', 'traslados', 'importar', 'actividad'].includes(base) ? 'mas' : base || '';
   return (
     <>
       {!online && <div className="banner off">Sin conexión · tus ventas se guardan y se envían al volver la señal</div>}

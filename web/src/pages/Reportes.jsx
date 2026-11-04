@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { get, money, qty, useCarga, hoyStr, useUbicaciones, esAdmin } from '../lib.js';
-import { Header, Cargando, Campo, SelectorBodega } from '../ui.jsx';
+import { get, money, qty, useCarga, hoyStr, useUbicaciones, esAdmin, descargarCsv } from '../lib.js';
+import { Header, Cargando, Campo, SelectorBodega, useAccion } from '../ui.jsx';
 
 export function Reportes({ user }) {
   const { bodegas } = useUbicaciones();
   const [bodega, setBodega] = useState('');
+  const [ocupado, run] = useAccion();
   const [desde, setDesde] = useState(hoyStr().slice(0, 8) + '01');
   const [hasta, setHasta] = useState(hoyStr());
   const s = useCarga(() => get(`/reportes/resumen?desde=${desde}&hasta=${hasta}${bodega ? `&bodega_id=${bodega}` : ''}`), [desde, hasta, bodega]);
@@ -42,6 +43,16 @@ export function Reportes({ user }) {
             <div className="card"><h3>Productos más vendidos</h3>
               <table className="t"><thead><tr><th>Producto</th><th className="n">Cant.</th><th className="n">Ventas</th><th className="n">Utilidad</th></tr></thead>
                 <tbody>{d.top_productos.map((p) => <tr key={p.nombre}><td>{p.nombre}</td><td className="n">{qty(p.cantidad)} <span className="mut">{p.unidad}</span></td><td className="n">{money(p.ventas)}</td><td className="n ok">{money(p.utilidad)}</td></tr>)}</tbody></table></div>
+            <div className="card"><h3>Descargar para Excel</h3>
+              <p className="mut" style={{ marginTop: 0 }}>Usan las fechas{esAdmin(user) && bodega ? ' y la bodega' : ''} de arriba.</p>
+              <div className="grid2">
+                {[['ventas', 'Ventas (por producto)', `desde=${desde}&hasta=${hasta}${bodega ? `&bodega_id=${bodega}` : ''}`], ['cierres', 'Cierres del día', `desde=${desde}&hasta=${hasta}${bodega ? `&bodega_id=${bodega}` : ''}`],
+                  ['inventario', 'Inventario actual', ''], ['movimientos', 'Movimientos de inventario', `desde=${desde}&hasta=${hasta}`],
+                  ['cartera', 'Cartera (por cobrar)', bodega ? `bodega_id=${bodega}` : ''], ['clientes', 'Clientes', '']].map(([k, t, q]) => (
+                  <button key={k} className="btn sm sec" disabled={ocupado} onClick={() => run(() => descargarCsv(`/exportar/${k}${q ? `?${q}` : ''}`, k), 'Descarga lista')}>⬇ {t}</button>
+                ))}
+              </div>
+            </div>
             <div className="card"><h3>Ventas por día</h3>{d.por_dia.map((x) => { const max = Math.max(...d.por_dia.map((y) => y.ventas)); return <div key={x.dia} style={{ marginBottom: 6 }}><div className="row between mut"><span>{x.dia}</span><span>{money(x.ventas)}</span></div><div className="bar"><i style={{ width: `${(x.ventas / max) * 100}%` }} /></div></div>; })}</div>
           </>
         )}
