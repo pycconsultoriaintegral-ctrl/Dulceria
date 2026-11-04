@@ -1,20 +1,22 @@
 import { useState } from 'react';
-import { post, cerrarSesion, ir } from '../lib.js';
+import { post, cerrarSesion, ir, ROL_NOMBRE, puedeGestionar } from '../lib.js';
 import { Header, Campo, Modal, useAccion } from '../ui.jsx';
 
 export function Mas({ user }) {
   const admin = user.rol === 'admin';
   const [clave, setClave] = useState(false);
+  const gestiona = puedeGestionar(user);
   const items = [
     ['/cartera', '💰', 'Cartera (por cobrar)'], ['/cierre', '🧾', 'Cierre del día'],
-    ...(admin ? [['/productos', '🍬', 'Productos'], ['/compras', '📥', 'Compras y proveedores'], ['/reportes', '📊', 'Reportes'], ['/ajustes', '⚙️', 'Ajustes, rutas y usuarios']] : []),
+    ...(gestiona ? [['/traslados', '🚚', 'Traslados entre bodegas'], ['/compras', '📥', 'Compras y proveedores'], ['/reportes', '📊', 'Reportes']] : []),
+    ...(admin ? [['/productos', '🍬', 'Productos'], ['/ajustes', '⚙️', 'Ajustes, bodegas, rutas y usuarios']] : []),
   ];
   return (
     <>
       <Header titulo="Más" />
       <main>
         <div className="card list">{items.map(([to, ic, t]) => <div key={to} className="item" onClick={() => ir(to)}><span style={{ fontSize: 22 }}>{ic}</span><span className="grow bold">{t}</span><span className="mut">›</span></div>)}</div>
-        <div className="card"><div className="bold">{user.nombre}</div><div className="mut">@{user.usuario} · {admin ? 'Administrador' : 'Vendedor de ruta'}</div>
+        <div className="card"><div className="bold">{user.nombre}</div><div className="mut">@{user.usuario} · {ROL_NOMBRE[user.rol]}</div>
           <div className="row" style={{ marginTop: 10 }}><button className="btn sec grow" onClick={() => setClave(true)}>Cambiar contraseña</button><button className="btn gris grow" onClick={cerrarSesion}>Cerrar sesión</button></div></div>
       </main>
       {clave && <CambiarClave onClose={() => setClave(false)} />}

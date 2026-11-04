@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ir, get, blob, compartirRemision, descargarPdf } from './lib.js';
+import { ir, get, blob, compartirRemision, descargarPdf, conPrefijo } from './lib.js';
 
 export function Header({ titulo, atras }) {
   return (
@@ -141,3 +141,32 @@ function Pagina({ p, ancho }) {
   return <canvas ref={ref} style={{ background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.25)' }} />;
 }
 const useCallbackRef = () => useRef(null);
+
+// Selector agrupado por bodega: el mostrador de la bodega y sus rutas
+export function SelectorPunto({ bodegas, value, onChange, label = 'Punto de venta', mostrador = true, vacio = '— elegir —', todos = false }) {
+  return (
+    <label className="f">{label}
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{todos ? 'Todos' : vacio}</option>
+        {bodegas.map((b) => (
+          <optgroup key={b.id} label={b.nombre}>
+            {mostrador && b.puede_mostrador && <option value={`B${b.id}`}>Mostrador · {b.nombre}</option>}
+            {b.rutas.filter((r) => r.activa).map((r) => <option key={r.id} value={`R${r.id}`}>{conPrefijo('Ruta', r.nombre)}</option>)}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+// Selector simple de bodega
+export function SelectorBodega({ bodegas, value, onChange, label = 'Bodega', vacio = '— elegir —', todos = false }) {
+  return (
+    <label className="f">{label}
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{todos ? 'Todas' : vacio}</option>
+        {bodegas.filter((b) => b.activa).map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+      </select>
+    </label>
+  );
+}

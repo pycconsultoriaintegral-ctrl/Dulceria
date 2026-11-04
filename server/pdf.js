@@ -22,7 +22,7 @@ export function remisionPdf(r, cfg) {
   doc.font('Helvetica-Bold').text('Dirección:', L + 8, y + 22).font('Helvetica').text(r.cliente_direccion || '-', L + 60, y + 22);
   doc.font('Helvetica-Bold').text('Teléfono:', L + 8, y + 36).font('Helvetica').text(r.telefono || '-', L + 60, y + 36);
   doc.font('Helvetica-Bold').text('Vendedor:', L + 300, y + 8).font('Helvetica').text(r.vendedor, L + 355, y + 8);
-  doc.font('Helvetica-Bold').text('Ruta:', L + 300, y + 22).font('Helvetica').text(r.ruta || 'Mostrador', L + 355, y + 22);
+  doc.font('Helvetica-Bold').text('Punto:', L + 300, y + 22).font('Helvetica').text(r.punto || r.ruta || 'Mostrador', L + 355, y + 22, { width: 170 });
   doc.font('Helvetica-Bold').text('Pago:', L + 300, y + 36).font('Helvetica').text(r.tipo_pago === 'contado' ? 'Contado' : 'Crédito', L + 355, y + 36);
 
   y += 72;
@@ -107,7 +107,7 @@ function dibujarTicket(doc, r, cfg) {
   if (r.cliente_direccion) dato('Dirección', r.cliente_direccion);
   if (r.telefono) dato('Teléfono', r.telefono);
   dato('Vendedor', r.vendedor);
-  dato('Ruta', r.ruta || 'Mostrador');
+  dato('Punto', r.punto || r.ruta || 'Mostrador');
   dato('Pago', r.tipo_pago === 'contado' ? 'Contado' : 'Crédito');
   linea();
   for (const i of r.items) {

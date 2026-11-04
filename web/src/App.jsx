@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
-import { getUser, getToken, guardarSesion, login, get, useHash, sincronizar, useCola } from './lib.js';
-import { Toaster, Campo, useAccion, toast, VisorPdf } from './ui.jsx';
+import { getUser, getToken, guardarSesion, login, get, useHash, sincronizar, useCola, puedeGestionar } from './lib.js';
+import { Toaster, Campo, useAccion, toast, VisorPdf, Header } from './ui.jsx';
 import { Inicio } from './pages/Inicio.jsx';
 import Vender from './pages/Vender.jsx';
 import { Remisiones, RemisionDetalle } from './pages/Remisiones.jsx';
 import { Clientes, ClienteDetalle, Cartera } from './pages/Clientes.jsx';
 import { Inventario } from './pages/Inventario.jsx';
-import { Productos, Compras, Reportes, Ajustes } from './pages/Admin.jsx';
+import { Productos } from './pages/Admin.jsx';
+import { Compras } from './pages/Compras.jsx';
+import { Reportes } from './pages/Reportes.jsx';
+import { Ajustes } from './pages/Ajustes.jsx';
+import { Traslados } from './pages/Traslados.jsx';
 import { Cierre } from './pages/Cierre.jsx';
 import { Mas } from './pages/Mas.jsx';
 
@@ -43,6 +47,8 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     cargarCfg(); sincronizar();
+    // refresca los datos del usuario (rol, ruta, bodega) por si el administrador los cambió
+    get('/auth/me').then((me) => { guardarSesion(getToken(), me); setUser(me); }).catch(() => {});
     const on = () => { setOnline(true); sincronizar(); }, off = () => setOnline(false);
     addEventListener('online', on); addEventListener('offline', off);
     const t = setInterval(sincronizar, 30000);
@@ -51,8 +57,10 @@ export default function App() {
 
   if (!user) return <Login onOk={setUser} />;
   const admin = user.rol === 'admin';
-  const [, base, id] = ruta.split('/');
+  const gestiona = puedeGestionar(user);
+  const [, base, id] = ruta.split('?')[0].split('/');
   const p = { user, cfg };
+  const sinAcceso = <><Header titulo="Sin acceso" /><main><div className="center mut">🔒 Tu usuario no tiene permiso para ver esta pantalla.</div></main></>;
   let page;
   switch (base) {
     case 'vender': page = <Vender {...p} />; break;
@@ -61,15 +69,16 @@ export default function App() {
     case 'cartera': page = <Cartera {...p} />; break;
     case 'inventario': page = <Inventario {...p} />; break;
     case 'cierre': page = <Cierre {...p} />; break;
-    case 'productos': page = admin ? <Productos /> : null; break;
-    case 'compras': page = admin ? <Compras /> : null; break;
-    case 'reportes': page = admin ? <Reportes /> : null; break;
-    case 'ajustes': page = admin ? <Ajustes cfgRefrescar={cargarCfg} /> : null; break;
+    case 'productos': page = admin ? <Productos /> : sinAcceso; break;
+    case 'compras': page = gestiona ? <Compras user={user} /> : sinAcceso; break;
+    case 'reportes': page = gestiona ? <Reportes user={user} /> : sinAcceso; break;
+    case 'traslados': page = gestiona ? <Traslados user={user} /> : sinAcceso; break;
+    case 'ajustes': page = admin ? <Ajustes cfgRefrescar={cargarCfg} /> : sinAcceso; break;
     case 'mas': page = <Mas {...p} />; break;
     default: page = <Inicio {...p} />;
   }
   const tabs = [['', '🏠', 'Inicio'], ['vender', '🛒', 'Vender'], ['remisiones', '🧾', 'Remisiones'], ['clientes', '👥', 'Clientes'], ['inventario', '📦', 'Inventario'], ['mas', '☰', 'Más']];
-  const activo = ['productos', 'compras', 'reportes', 'ajustes', 'cartera', 'cierre'].includes(base) ? 'mas' : base || '';
+  const activo = ['productos', 'compras', 'reportes', 'ajustes', 'cartera', 'cierre', 'traslados'].includes(base) ? 'mas' : base || '';
   return (
     <>
       {!online && <div className="banner off">Sin conexión · tus ventas se guardan y se envían al volver la señal</div>}

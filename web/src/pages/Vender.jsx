@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import { get, post, enviar, uuid, money, qty, useCarga, ir, compartirRemision, abrirPdf, numRem } from '../lib.js';
-import { Header, Cargando, Stepper, Modal, Campo, toast, useAccion } from '../ui.jsx';
+import { get, post, enviar, uuid, money, qty, useCarga, ir, compartirRemision, abrirPdf, numRem, useUbicaciones } from '../lib.js';
+import { Header, Cargando, Stepper, Modal, Campo, toast, useAccion, SelectorPunto } from '../ui.jsx';
 
 export default function Vender({ user, cfg }) {
-  const esAdmin = user.rol === 'admin';
-  const [rutaAdmin, setRutaAdmin] = useState(0);
-  const rutas = useCarga(() => (esAdmin ? get('/rutas') : []), []);
-  const prods = useCarga(() => get(`/productos?ruta_id=${esAdmin ? rutaAdmin : user.ruta_id}`), [rutaAdmin]);
+  const elige = user.rol !== 'vendedor'; // el vendedor siempre vende de su ruta; los demás eligen el punto de venta
+  const { bodegas } = useUbicaciones();
+  const [punto, setPunto] = useState(user.rol === 'bodeguero' ? `B${user.bodega_id}` : '');
+  const prods = useCarga(() => (elige && !punto ? [] : get(`/productos?punto=${punto}`)), [punto]);
   const clientes = useCarga(() => get('/clientes'), []);
   const [cliente, setCliente] = useState(null);
   const [buscaCli, setBuscaCli] = useState('');
@@ -31,14 +31,15 @@ export default function Vender({ user, cfg }) {
   const setPrecio = (p, v) => setItems((it) => ({ ...it, [p.id]: { cantidad: it[p.id]?.cantidad ?? 0, precio: Number(v) || 0 } }));
 
   const confirmar = () => run(async () => {
+    if (elige && !punto) throw new Error('Elige el punto de venta');
     if (!cliente) throw new Error('Elige el cliente');
     if (!sel.length) throw new Error('Agrega al menos un producto');
-    const sinStock = sel.find((p) => items[p.id].cantidad > p.stock_ruta);
+    const sinStock = sel.find((p) => items[p.id].cantidad > p.stock_punto);
     if (sinStock) throw new Error(`Solo hay ${qty(sinStock.stock_ruta)} de "${sinStock.nombre}" en la ruta`);
     if (tipo === 'credito' && (Number(abono) || 0) > total) throw new Error('El abono no puede superar el total');
     const payload = {
       uuid: uid, cliente_id: cliente.id, tipo_pago: tipo, abono: tipo === 'credito' ? Number(abono) || 0 : 0,
-      descuento: Number(desc) || 0, nota, ruta_id: esAdmin ? rutaAdmin : undefined,
+      descuento: Number(desc) || 0, nota, punto: elige ? punto : undefined,
       items: sel.map((p) => ({ producto_id: p.id, cantidad: items[p.id].cantidad, precio: items[p.id].precio })),
     };
     const r = await enviar('venta', payload, `${cliente.nombre} · ${money(total)}`);
@@ -52,14 +53,7 @@ export default function Vender({ user, cfg }) {
     <>
       <Header titulo="Nueva venta" />
       <main>
-        {esAdmin && (
-          <label className="f">Vender desde
-            <select value={rutaAdmin} onChange={(e) => { setRutaAdmin(+e.target.value); setItems({}); }}>
-              <option value={0}>Bodega / mostrador</option>
-              {(rutas.data || []).map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-            </select>
-          </label>
-        )}
+        {elige && <SelectorPunto bodegas={bodegas} value={punto} onChange={(v) => { setPunto(v); setItems({}); }} label="Vender desde" />}
         <div className="card">
           <h3>Cliente</h3>
           {cliente ? (
@@ -87,17 +81,17 @@ export default function Vender({ user, cfg }) {
             <div className="list">
               {filtrados.map((p) => {
                 const it = items[p.id];
-                const agotado = p.stock_ruta <= 0;
+                const agotado = p.stock_punto <= 0;
                 return (
                   <div key={p.id} className="item" style={{ cursor: 'default', opacity: agotado ? 0.5 : 1 }}>
                     <div className="grow">
                       <div className="bold">{p.nombre}</div>
                       <div className="mut">
                         {it?.cantidad > 0 ? <>Precio <input style={{ width: 80, padding: 3 }} inputMode="decimal" value={it.precio} onChange={(e) => setPrecio(p, e.target.value)} /></> : money(p.precio)}
-                        {' · '}disp. {qty(p.stock_ruta)}
+                        {' · '}disp. {qty(p.stock_punto)}
                       </div>
                     </div>
-                    {agotado ? <span className="tag mal">Agotado</span> : <Stepper value={it?.cantidad || 0} max={p.stock_ruta} onChange={(c) => setCant(p, c)} />}
+                    {agotado ? <span className="tag mal">Agotado</span> : <Stepper value={it?.cantidad || 0} max={p.stock_punto} onChange={(c) => setCant(p, c)} />}
                   </div>
                 );
               })}
@@ -123,7 +117,7 @@ export default function Vender({ user, cfg }) {
           <button className="btn block" style={{ marginTop: 8 }} disabled={ocupado || !sel.length || !cliente} onClick={confirmar}>{ocupado ? 'Guardando…' : 'Generar remisión'}</button>
         </div>
       </main>
-      {nuevoCli && <NuevoCliente onClose={() => setNuevoCli(false)} onCreado={async (id) => { setNuevoCli(false); const lst = await get('/clientes'); clientes.recargar(); setCliente(lst.find((c) => c.id === id)); }} />}
+      {nuevoCli && <NuevoCliente onClose={() => setNuevoCli(false)} onCreado={async (id) => { setNuevoCli(false); const lst = await get('/clientes'); clientes.recargar(); setCliente(lst.find((c) => c.id === id)); }} user={user} bodegas={bodegas} />}
     </>
   );
 }
@@ -149,8 +143,8 @@ function Listo({ hecho, cliente, cfg, onNueva }) {
   );
 }
 
-export function NuevoCliente({ onClose, onCreado }) {
-  const [f, setF] = useState({ nombre: '', negocio: '', telefono: '', direccion: '' });
+export function NuevoCliente({ onClose, onCreado, user, bodegas = [] }) {
+  const [f, setF] = useState({ nombre: '', negocio: '', telefono: '', direccion: '', ruta_id: '' });
   const [ocupado, run] = useAccion();
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   return (
@@ -159,6 +153,7 @@ export function NuevoCliente({ onClose, onCreado }) {
       <Campo label="Negocio" value={f.negocio} onChange={set('negocio')} />
       <Campo label="Teléfono / WhatsApp" inputMode="tel" value={f.telefono} onChange={set('telefono')} />
       <Campo label="Dirección" value={f.direccion} onChange={set('direccion')} />
+      {user?.rol !== 'vendedor' && <SelectorPunto bodegas={bodegas} value={f.ruta_id ? `R${f.ruta_id}` : ''} onChange={(v) => setF({ ...f, ruta_id: v.startsWith('R') ? v.slice(1) : '' })} label="Ruta del cliente (opcional)" mostrador={false} vacio="Sin ruta" />}
       <button className="btn block" disabled={ocupado} onClick={() => run(async () => { const r = await post('/clientes', f); toast('Cliente creado'); onCreado(r.id); })}>Guardar</button>
     </Modal>
   );

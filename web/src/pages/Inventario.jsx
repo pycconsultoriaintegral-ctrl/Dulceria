@@ -1,76 +1,117 @@
 import { useState } from 'react';
-import { get, post, money, qty, useCarga } from '../lib.js';
+import { get, post, money, qty, useCarga, useUbicaciones, puedeGestionar, ir, conPrefijo } from '../lib.js';
 import { Header, Cargando, Vacio, Modal, Campo, Stepper, toast, useAccion } from '../ui.jsx';
 
 export function Inventario({ user }) {
-  const admin = user.rol === 'admin';
-  const s = useCarga(() => get('/inventario'), []);
-  const [vista, setVista] = useState('bodega'); // 'bodega' | id de ruta
-  const [traslado, setTraslado] = useState(null);
+  const gestiona = puedeGestionar(user);
+  const { bodegas } = useUbicaciones();
+  // vendedor: su ruta; encargado: su bodega; administrador: resumen general
+  const [ub, setUb] = useState(user.rol === 'vendedor' ? `R${user.ruta_id}` : user.rol === 'bodeguero' ? `B${user.bodega_id}` : 'resumen');
+  const [q, setQ] = useState('');
+  const s = useCarga(() => get(`/inventario?ub=${ub}`), [ub]);
+  const pend = useCarga(() => (gestiona ? get('/traslados?estado=enviado') : []), []);
+  const [movimiento, setMovimiento] = useState(null); // { sentido }
   const [ajuste, setAjuste] = useState(null);
   const [kardex, setKardex] = useState(null);
   const d = s.data;
-  const ruta = admin ? (vista === 'bodega' ? 0 : Number(vista)) : user.ruta_id;
-  const cant = (p) => (ruta === 0 ? p.bodega : p.rutas[ruta] ?? 0);
+  const filtrados = (d?.productos || []).filter((p) => p.nombre.toLowerCase().includes(q.toLowerCase()));
+  const porRecibir = (pend.data || []).filter((t) => (user.rol === 'admin' || t.destino_id === user.bodega_id));
+
   return (
     <>
       <Header titulo="Inventario" />
       <main>
+        {gestiona && (
+          <label className="f">Ver inventario de
+            <select value={ub} onChange={(e) => { setUb(e.target.value); setQ(''); }}>
+              <option value="resumen">📊 Resumen general</option>
+              {bodegas.map((b) => (
+                <optgroup key={b.id} label={b.nombre}>
+                  <option value={`B${b.id}`}>{conPrefijo('Bodega', b.nombre)}</option>
+                  {b.rutas.map((r) => <option key={r.id} value={`R${r.id}`}>{conPrefijo('Ruta', r.nombre)}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+        )}
+        {gestiona && porRecibir.length > 0 && (
+          <div className="card" style={{ borderColor: 'var(--oro)', cursor: 'pointer' }} onClick={() => ir('/traslados')}>
+            <b>📦 {porRecibir.length} traslado(s) en camino</b><div className="mut">Toca para ver y recibir</div>
+          </div>
+        )}
         {s.loading || s.error ? <Cargando s={s} /> : (
           <>
-            {admin && (
+            {d.ub !== 'resumen' && gestiona && (
               <div className="row wrap" style={{ marginBottom: 10 }}>
-                {[{ id: 'bodega', nombre: 'Bodega' }, ...d.rutas].map((r) => <button key={r.id} className={'btn sm ' + (String(vista) === String(r.id) ? '' : 'gris')} onClick={() => setVista(String(r.id))}>{r.nombre}</button>)}
-              </div>
-            )}
-            {admin && (
-              <div className="row" style={{ marginBottom: 10 }}>
-                {ruta !== 0 ? (
+                {d.tipo === 'R' ? (
                   <>
-                    <button className="btn grow" onClick={() => setTraslado({ ruta, sentido: 'cargue' })}>⬆ Cargar ruta</button>
-                    <button className="btn sec grow" onClick={() => setTraslado({ ruta, sentido: 'devolucion' })}>⬇ Recibir devolución</button>
+                    <button className="btn grow" onClick={() => setMovimiento({ sentido: 'cargue' })}>⬆ Cargar ruta</button>
+                    <button className="btn sec grow" onClick={() => setMovimiento({ sentido: 'devolucion' })}>⬇ Recibir devolución</button>
                   </>
-                ) : <div className="mut">Para cargar mercancía a una ruta elige la ruta arriba.</div>}
+                ) : <button className="btn sec grow" onClick={() => ir(`/traslados?nuevo=${d.bodega_id}`)}>↔ Enviar a otra bodega</button>}
               </div>
             )}
-            <div className="card list">
-              {d.productos.length === 0 ? <Vacio>Aún no hay productos</Vacio> : d.productos.map((p) => {
-                const c = cant(p);
-                return (
-                  <div key={p.id} className="item" onClick={() => admin && setAjuste({ p, ubicacion: ruta, actual: c })}>
-                    <div className="grow"><div className="bold">{p.nombre}</div>{admin && <div className="mut">Costo {money(p.costo)} · valor {money(c * p.costo)}</div>}</div>
-                    <div className="right"><b className={c <= 0 ? 'mal' : c <= p.stock_minimo ? 'warn' : ''}>{qty(c)}</b> <span className="mut">{p.unidad}</span></div>
-                    {admin && <button className="btn sm gris" onClick={(e) => { e.stopPropagation(); setKardex(p); }}>Kardex</button>}
+            <input className="q" placeholder="Buscar producto…" value={q} onChange={(e) => setQ(e.target.value)} />
+            {filtrados.length === 0 ? <Vacio>Sin productos</Vacio> : d.ub === 'resumen' ? (
+              <div className="card list">
+                {filtrados.map((p) => (
+                  <div key={p.id} className="item" style={{ cursor: 'default' }}>
+                    <div className="grow">
+                      <div className="bold">{p.nombre}</div>
+                      <div className="mut">{d.bodegas.map((b) => `${b.nombre} ${qty(p.por_bodega[b.id] || 0)}`).join(' · ')} · Rutas {qty(p.en_rutas)}</div>
+                    </div>
+                    <div className="right"><b className={p.total <= 0 ? 'mal' : ''}>{qty(p.total)}</b> <span className="mut">{p.unidad}</span>
+                      {p.costo !== undefined && <div className="mut">{money(p.total * p.costo)}</div>}</div>
                   </div>
-                );
-              })}
-            </div>
-            {admin && <p className="mut">Toca un producto para ajustar el conteo físico.</p>}
+                ))}
+              </div>
+            ) : (
+              <div className="card list">
+                {filtrados.map((p) => {
+                  const c = p.cantidad;
+                  const bajo = d.tipo === 'B' && p.stock_minimo > 0 && c <= p.stock_minimo;
+                  return (
+                    <div key={p.id} className="item" onClick={() => gestiona && setAjuste({ p, ub: d.ub, actual: c })}>
+                      <div className="grow"><div className="bold">{p.nombre}</div>{p.costo !== undefined && <div className="mut">Costo {money(p.costo)} · valor {money(c * p.costo)}</div>}</div>
+                      <div className="right"><b className={c <= 0 ? 'mal' : bajo ? 'warn' : ''}>{qty(c)}</b> <span className="mut">{p.unidad}</span>{bajo && <div className="tag warn">Reponer</div>}</div>
+                      {gestiona && <button className="btn sm gris" onClick={(e) => { e.stopPropagation(); setKardex({ p, ub: d.ub }); }}>Kardex</button>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {gestiona && d.ub !== 'resumen' && <p className="mut">Toca un producto para ajustar el conteo físico.</p>}
           </>
         )}
       </main>
-      {traslado && <Traslado t={traslado} productos={d.productos} nombreRuta={d.rutas.find((r) => r.id === traslado.ruta)?.nombre} onClose={() => setTraslado(null)} onHecho={() => { setTraslado(null); s.recargar(); }} />}
+      {movimiento && <MovimientoRuta ruta={d} sentido={movimiento.sentido} onClose={() => setMovimiento(null)} onHecho={() => { setMovimiento(null); s.recargar(); }} />}
       {ajuste && <Ajuste a={ajuste} onClose={() => setAjuste(null)} onHecho={() => { setAjuste(null); s.recargar(); }} />}
-      {kardex && <Kardex p={kardex} onClose={() => setKardex(null)} />}
+      {kardex && <Kardex k={kardex} onClose={() => setKardex(null)} />}
     </>
   );
 }
 
-function Traslado({ t, productos, nombreRuta, onClose, onHecho }) {
+// Cargue (bodega de la ruta -> ruta) o devolución (ruta -> su bodega)
+function MovimientoRuta({ ruta, sentido, onClose, onHecho }) {
+  const cargue = sentido === 'cargue';
+  const origen = useCarga(() => (cargue ? get(`/inventario?ub=B${ruta.bodega_id}`) : ruta), [ruta.ub]);
   const [q, setQ] = useState({});
+  const [filtro, setFiltro] = useState('');
   const [ocupado, run] = useAccion();
+  const productos = (origen.data?.productos || []).filter((p) => p.cantidad > 0 && p.nombre.toLowerCase().includes(filtro.toLowerCase()));
   const items = Object.entries(q).filter(([, c]) => c > 0).map(([producto_id, cantidad]) => ({ producto_id: +producto_id, cantidad }));
-  const cargue = t.sentido === 'cargue';
   return (
-    <Modal titulo={`${cargue ? 'Cargar' : 'Devolución de'} ${nombreRuta}`} onClose={onClose}>
-      <p className="mut">{cargue ? 'Sale de la bodega y queda en la ruta.' : 'Sale de la ruta y regresa a la bodega (lo que sobró al final del día).'}</p>
-      {productos.map((p) => {
-        const disp = cargue ? p.bodega : p.rutas[t.ruta] ?? 0;
-        if (disp <= 0) return null;
-        return <div key={p.id} className="item row between" style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }}><div><div className="bold">{p.nombre}</div><div className="mut">disp. {qty(disp)}</div></div>
-          <Stepper value={q[p.id] || 0} max={disp} onChange={(c) => setQ({ ...q, [p.id]: c })} /></div>;
-      })}
-      <button className="btn block" style={{ marginTop: 12 }} disabled={ocupado || !items.length} onClick={() => run(async () => { await post('/inventario/traslado', { ruta_id: t.ruta, sentido: t.sentido, items }); onHecho(); }, 'Movimiento registrado')}>Confirmar {items.length} producto(s)</button>
+    <Modal titulo={`${cargue ? 'Cargar' : 'Devolución de'} ${ruta.nombre}`} onClose={onClose}>
+      <p className="mut">{cargue ? 'Sale de la bodega de la ruta y queda en la ruta.' : 'Sale de la ruta y regresa a su bodega (lo que sobró al final del día).'}</p>
+      <input className="q" placeholder="Buscar producto…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+      {origen.loading ? <Cargando s={origen} /> : productos.length === 0 ? <Vacio>No hay productos disponibles</Vacio> : productos.map((p) => (
+        <div key={p.id} className="item row between" style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }}>
+          <div><div className="bold">{p.nombre}</div><div className="mut">disp. {qty(p.cantidad)}</div></div>
+          <Stepper value={q[p.id] || 0} max={p.cantidad} onChange={(c) => setQ({ ...q, [p.id]: c })} />
+        </div>
+      ))}
+      <button className="btn block" style={{ marginTop: 12 }} disabled={ocupado || !items.length}
+        onClick={() => run(async () => { await post('/inventario/cargue', { ruta_id: Number(ruta.ub.slice(1)), sentido, items }); onHecho(); }, 'Movimiento registrado')}>Confirmar {items.length} producto(s)</button>
     </Modal>
   );
 }
@@ -84,18 +125,18 @@ function Ajuste({ a, onClose, onHecho }) {
       <p className="mut">Sistema: {qty(a.actual)}. Escribe lo que contaste físicamente.</p>
       <Campo label="Cantidad real" inputMode="decimal" value={real} onChange={(e) => setReal(e.target.value)} />
       <Campo label="Motivo (merma, vencido, conteo…)" value={nota} onChange={(e) => setNota(e.target.value)} />
-      <button className="btn block" disabled={ocupado} onClick={() => run(async () => { await post('/inventario/ajuste', { producto_id: a.p.id, ubicacion: a.ubicacion, cantidad_real: Number(real), nota }); onHecho(); }, 'Ajuste guardado')}>Guardar ajuste</button>
+      <button className="btn block" disabled={ocupado} onClick={() => run(async () => { await post('/inventario/ajuste', { producto_id: a.p.id, ub: a.ub, cantidad_real: Number(real), nota }); onHecho(); }, 'Ajuste guardado')}>Guardar ajuste</button>
     </Modal>
   );
 }
 
-function Kardex({ p, onClose }) {
-  const s = useCarga(() => get(`/inventario/kardex/${p.id}`), []);
+function Kardex({ k, onClose }) {
+  const s = useCarga(() => get(`/inventario/kardex/${k.p.id}?ub=${k.ub}`), []);
   return (
-    <Modal titulo={`Kardex · ${p.nombre}`} onClose={onClose}>
+    <Modal titulo={`Kardex · ${k.p.nombre}`} onClose={onClose}>
       {s.loading || s.error ? <Cargando s={s} /> : (
-        <table className="t"><thead><tr><th>Fecha</th><th>Tipo</th><th className="n">Cant.</th></tr></thead>
-          <tbody>{s.data.map((m) => <tr key={m.id}><td>{m.fecha.slice(5, 10)}<div className="mut">{m.referencia}</div></td><td>{m.tipo}<div className="mut">{m.ubicacion === 0 ? 'Bodega' : `Ruta ${m.ubicacion}`}</div></td><td className={'n ' + (m.cantidad < 0 ? 'mal' : 'ok')}>{m.cantidad > 0 ? '+' : ''}{qty(m.cantidad)}</td></tr>)}</tbody></table>
+        <table className="t"><thead><tr><th>Fecha</th><th>Movimiento</th><th className="n">Cant.</th></tr></thead>
+          <tbody>{s.data.map((m) => <tr key={m.id}><td>{m.fecha.slice(5, 10)}<div className="mut">{m.referencia}</div></td><td>{m.tipo.replaceAll('_', ' ')}<div className="mut">{m.nota || m.usuario}</div></td><td className={'n ' + (m.cantidad < 0 ? 'mal' : 'ok')}>{m.cantidad > 0 ? '+' : ''}{qty(m.cantidad)}</td></tr>)}</tbody></table>
       )}
     </Modal>
   );
