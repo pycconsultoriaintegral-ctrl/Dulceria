@@ -12,7 +12,7 @@
     "dev": "node --watch server/index.js",
     "build": "npm --prefix web install && npm --prefix web run build",
     "seed": "node server/seed.js",
-    "test": "node --no-warnings --test server/tests/*.test.js"
+    "test": "node --no-warnings --test --test-timeout=60000 server/tests/*.test.js"
   },
   "dependencies": {
     "express": "^5.2.1",

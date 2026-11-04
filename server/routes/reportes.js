@@ -22,6 +22,8 @@ router.get('/resumen', wrap((req, res) => {
   const descuentos = db.prepare(`SELECT COALESCE(SUM(descuento),0) AS v FROM remisiones r WHERE r.anulada=0 AND ${rango('r')} AND ${filtro('r')}`).get(p).v;
   const gastos = db.prepare(`SELECT COALESCE(SUM(valor),0) AS v FROM gastos g WHERE ${rango('g')} AND ${filtro('g')}`).get(p).v;
   const compras = db.prepare(`SELECT COALESCE(SUM(total),0) AS v FROM compras c WHERE c.anulada=0 AND ${rango('c')} AND ${filtro('c')}`).get(p).v;
+  const cobros = db.prepare(`SELECT COALESCE(SUM(CASE WHEN metodo='efectivo' THEN valor END),0) AS efectivo, COALESCE(SUM(CASE WHEN metodo<>'efectivo' THEN valor END),0) AS transferencias
+    FROM pagos p WHERE p.anulado=0 AND ${rango('p')} AND ${filtro('p')}`).get(p);
   const porRuta = db.prepare(`SELECT CASE WHEN ru.id IS NULL THEN 'Mostrador ' || b.nombre WHEN lower(ru.nombre) LIKE 'ruta%' THEN ru.nombre ELSE 'Ruta ' || ru.nombre END AS punto, b.nombre AS bodega, COUNT(*) AS remisiones, SUM(r.total) AS ventas
     FROM remisiones r JOIN bodegas b ON b.id=r.bodega_id LEFT JOIN rutas ru ON ru.id=r.ruta_id
     WHERE r.anulada=0 AND ${rango('r')} AND ${filtro('r')} GROUP BY r.ruta_id, r.bodega_id ORDER BY ventas DESC`).all(p);
@@ -60,7 +62,7 @@ router.get('/resumen', wrap((req, res) => {
 
   const utilBruta = r2(ventas.ventas - costo);
   res.json({ ...p, bodega_id: bodegaId, ...ventas, costo: r2(costo), descuentos: r2(descuentos), utilidad_bruta: utilBruta, gastos: r2(gastos), utilidad_neta: r2(utilBruta - gastos),
-    compras: r2(compras), cartera: r2(cartera), por_pagar: r2(porPagar), valor_inventario: r2(valorInv), por_ruta: porRuta, por_bodega: porBodega,
+    compras: r2(compras), cobrado_efectivo: r2(cobros.efectivo), cobrado_transferencia: r2(cobros.transferencias), cartera: r2(cartera), por_pagar: r2(porPagar), valor_inventario: r2(valorInv), por_ruta: porRuta, por_bodega: porBodega,
     top_productos: topProductos, por_dia: porDia, stock_bajo: bajos });
 }));
 

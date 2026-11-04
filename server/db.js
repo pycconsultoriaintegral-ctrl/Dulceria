@@ -9,7 +9,7 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 // Ubicaciones de inventario: 'B<id>' = bodega, 'R<id>' = inventario en la ruta.
 // Esquema v2: varias bodegas; cada ruta pertenece a una bodega.
-const VERSION_ESQUEMA = 2;
+const VERSION_ESQUEMA = 3;
 
 const DDL = {
   config: (t) => `CREATE TABLE ${t} (clave TEXT PRIMARY KEY, valor TEXT)`,
@@ -60,7 +60,7 @@ const DDL = {
     usuario_id INTEGER, concepto TEXT NOT NULL, valor REAL NOT NULL)`,
   cierres: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, punto TEXT NOT NULL, ruta_id INTEGER, bodega_id INTEGER NOT NULL REFERENCES bodegas(id),
-    usuario_id INTEGER, ventas_contado REAL, abonos REAL, gastos REAL, esperado REAL, entregado REAL, diferencia REAL, nota TEXT,
+    usuario_id INTEGER, ventas_contado REAL, abonos REAL, transferencias REAL DEFAULT 0, gastos REAL, esperado REAL, entregado REAL, diferencia REAL, nota TEXT,
     UNIQUE (fecha, punto))`,
   // Traslados entre bodegas: salen de la origen al enviar y entran a la destino al recibir
   traslados: (t) => `CREATE TABLE ${t} (
@@ -115,7 +115,7 @@ function migrarDeV1() {
     crearEsquema(); // traslados, traslado_items e índices
     const rotas = db.prepare('PRAGMA foreign_key_check').all();
     if (rotas.length) throw new Error(`Migración inválida: ${rotas.length} referencias rotas`);
-    db.exec(`PRAGMA user_version = ${VERSION_ESQUEMA}`);
+    db.exec('PRAGMA user_version = 2');
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
@@ -125,16 +125,45 @@ function migrarDeV1() {
   }
 }
 
+// Migraciones incrementales: cada una lleva la base de la versión anterior a la indicada.
+// Deben ser idempotentes (una base migrada desde v1 ya trae algunas columnas del esquema actual).
+function agregarColumna(tabla, columna, definicion) {
+  if (!db.prepare(`SELECT 1 FROM pragma_table_info('${tabla}') WHERE name=?`).get(columna)) db.exec(`ALTER TABLE ${tabla} ADD COLUMN ${columna} ${definicion}`);
+}
+const MIGRACIONES = {
+  // v3: el cierre separa el dinero recibido por transferencia del efectivo
+  3: () => agregarColumna('cierres', 'transferencias', 'REAL DEFAULT 0'),
+};
+
+function aplicarMigraciones() {
+  let version = db.prepare('PRAGMA user_version').get().user_version;
+  while (version < VERSION_ESQUEMA) {
+    version += 1;
+    db.exec('BEGIN');
+    try {
+      MIGRACIONES[version]?.();
+      db.exec(`PRAGMA user_version = ${version}`);
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+  }
+}
+
 (function iniciarEsquema() {
   const version = db.prepare('PRAGMA user_version').get().user_version;
   if (version >= VERSION_ESQUEMA) { crearEsquema(); return; }
   if (existe('rutas') && !db.prepare("SELECT 1 FROM pragma_table_info('rutas') WHERE name='bodega_id'").get()) {
     migrarDeV1();
+    aplicarMigraciones();
+    return;
+  }
+  if (!existe('rutas')) { // base nueva: se crea directamente con el esquema actual
+    crearEsquema();
+    if (!db.prepare('SELECT 1 FROM bodegas').get()) db.exec("INSERT INTO bodegas (id, nombre) VALUES (1, 'Bodega principal')");
+    db.exec(`PRAGMA user_version = ${VERSION_ESQUEMA}`);
     return;
   }
   crearEsquema();
-  if (!db.prepare('SELECT 1 FROM bodegas').get()) db.exec("INSERT INTO bodegas (id, nombre) VALUES (1, 'Bodega principal')");
-  db.exec(`PRAGMA user_version = ${VERSION_ESQUEMA}`);
+  aplicarMigraciones();
 })();
 
 export const now = () => new Date().toISOString();

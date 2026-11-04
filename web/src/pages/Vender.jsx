@@ -14,6 +14,7 @@ export default function Vender({ user, cfg }) {
   const [items, setItems] = useState({}); // id -> {cantidad, precio}
   const [tipo, setTipo] = useState('contado');
   const [abono, setAbono] = useState('');
+  const [metodo, setMetodo] = useState('efectivo');
   const [desc, setDesc] = useState('');
   const [nota, setNota] = useState('');
   const [nuevoCli, setNuevoCli] = useState(false);
@@ -38,7 +39,7 @@ export default function Vender({ user, cfg }) {
     if (sinStock) throw new Error(`Solo hay ${qty(sinStock.stock_ruta)} de "${sinStock.nombre}" en la ruta`);
     if (tipo === 'credito' && (Number(abono) || 0) > total) throw new Error('El abono no puede superar el total');
     const payload = {
-      uuid: uid, cliente_id: cliente.id, tipo_pago: tipo, abono: tipo === 'credito' ? Number(abono) || 0 : 0,
+      uuid: uid, cliente_id: cliente.id, tipo_pago: tipo, metodo, abono: tipo === 'credito' ? Number(abono) || 0 : 0,
       descuento: Number(desc) || 0, nota, punto: elige ? punto : undefined,
       items: sel.map((p) => ({ producto_id: p.id, cantidad: items[p.id].cantidad, precio: items[p.id].precio })),
     };
@@ -47,7 +48,7 @@ export default function Vender({ user, cfg }) {
     else setHecho({ id: r.data.id, consecutivo: r.data.consecutivo, total });
   });
 
-  if (hecho) return <Listo hecho={hecho} cliente={cliente} cfg={cfg} onNueva={() => { setHecho(null); setItems({}); setCliente(null); setAbono(''); setDesc(''); setNota(''); setUid(uuid()); prods.recargar(); }} />;
+  if (hecho) return <Listo hecho={hecho} cliente={cliente} cfg={cfg} onNueva={() => { setHecho(null); setItems({}); setCliente(null); setAbono(''); setMetodo('efectivo'); setDesc(''); setNota(''); setUid(uuid()); prods.recargar(); }} />;
 
   return (
     <>
@@ -107,6 +108,12 @@ export default function Vender({ user, cfg }) {
               <button className={'btn grow ' + (tipo === 'credito' ? '' : 'gris')} onClick={() => setTipo('credito')}>Crédito</button>
             </div>
             {tipo === 'credito' && <Campo label="Abono inicial (opcional)" inputMode="decimal" value={abono} onChange={(e) => setAbono(e.target.value)} />}
+            {(tipo === 'contado' || Number(abono) > 0) && (
+              <div className="row" style={{ marginBottom: 12 }}>
+                <button className={'btn sm grow ' + (metodo === 'efectivo' ? '' : 'gris')} onClick={() => setMetodo('efectivo')}>💵 Efectivo</button>
+                <button className={'btn sm grow ' + (metodo === 'transferencia' ? '' : 'gris')} onClick={() => setMetodo('transferencia')}>📲 Transferencia</button>
+              </div>
+            )}
             <Campo label="Descuento ($)" inputMode="decimal" value={desc} onChange={(e) => setDesc(e.target.value)} />
             <Campo label="Nota (opcional)" value={nota} onChange={(e) => setNota(e.target.value)} />
           </div>

@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -36,7 +36,7 @@ const { db } = await import('../db.js');
 const { iniciar } = await import('./ayuda.js');
 
 test('la base v1 se migra a v2 sin perder datos', () => {
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 2);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 3);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
   const bodegas = db.prepare('SELECT * FROM bodegas').all();
   assert.equal(bodegas.length, 1);
@@ -61,6 +61,7 @@ test('la base v1 se migra a v2 sin perder datos', () => {
 
 test('después de migrar, la app funciona con los usuarios y datos de antes', async () => {
   const { server, call, login } = await iniciar();
+  after(() => server.close());
   const admin = await login('admin', 'admin123');
   const freddy = await login('freddy', 'freddy123');
   assert.ok(admin && freddy);
@@ -74,6 +75,5 @@ test('después de migrar, la app funciona con los usuarios y datos de antes', as
   assert.equal((await call('GET', '/inventario?ub=R1', null, freddy)).body.productos.find((p) => p.id === 1).cantidad, 35);
   assert.equal((await call('GET', '/cierre?punto=B1&fecha=2026-09-30', null, admin)).body.cierre.entregado, 3000);
   // y abrir de nuevo la base ya migrada no la vuelve a tocar
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 2);
-  server.close();
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 3);
 });
