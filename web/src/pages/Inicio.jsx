@@ -1,8 +1,8 @@
-import { get, money, qty, useCarga, ir, hoyStr, useCola } from '../lib.js';
+import { get, money, qty, useCarga, ir, hoyStr, puedeGestionar } from '../lib.js';
 import { Header, Cargando } from '../ui.jsx';
 
 export function Inicio({ user, cfg }) {
-  const admin = user.rol === 'admin';
+  const admin = puedeGestionar(user); // administrador y encargado de bodega ven el resumen de su alcance
   const s = useCarga(() => (admin ? get(`/reportes/resumen?desde=${hoyStr()}&hasta=${hoyStr()}`) : get(`/cierre?fecha=${hoyStr()}`)), []);
   const d = s.data;
   return (
@@ -19,7 +19,7 @@ export function Inicio({ user, cfg }) {
               <div className="kpi" onClick={() => ir('/cartera')} style={{ cursor: 'pointer' }}><div className="l">Por cobrar</div><div className="v warn">{money(d.cartera)}</div></div>
               <div className="kpi"><div className="l">Inventario a costo</div><div className="v">{money(d.valor_inventario)}</div></div>
             </div>
-            {d.stock_bajo.length > 0 && <div className="card" style={{ marginTop: 12 }}><h3 className="warn">⚠ Por reponer</h3>{d.stock_bajo.map((p) => <div key={p.id} className="row between"><span>{p.nombre}</span><b>{qty(p.total)}</b></div>)}</div>}
+            {d.stock_bajo.length > 0 && <div className="card" style={{ marginTop: 12 }}><h3 className="warn">⚠ Por reponer</h3>{d.stock_bajo.slice(0, 12).map((p) => <div key={`${p.bodega_id}-${p.id}`} className="row between"><span>{p.nombre}<div className="mut">{p.bodega}</div></span><b>{qty(p.total)}</b></div>)}</div>}
           </>
         ) : (
           <div className="grid2">

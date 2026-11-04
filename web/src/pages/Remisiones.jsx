@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { get, post, money, qty, useCarga, compartirRemision, abrirPdf, numRem, hoyStr, ir, useCola, descartarRechazada } from '../lib.js';
-import { Header, Cargando, Vacio, toast, useAccion, Confirmar } from '../ui.jsx';
+import { get, post, money, qty, useCarga, compartirRemision, abrirPdf, numRem, hoyStr, ir, useCola, descartarRechazada, useUbicaciones, conPrefijo } from '../lib.js';
+import { Header, Cargando, Vacio, toast, useAccion, Confirmar, SelectorPunto } from '../ui.jsx';
 
 export function Remisiones({ user, cfg }) {
   const [fecha, setFecha] = useState(hoyStr());
-  const s = useCarga(() => get(`/remisiones?desde=${fecha}&hasta=${fecha}`), [fecha]);
+  const { bodegas } = useUbicaciones();
+  const [punto, setPunto] = useState('');
+  const s = useCarga(() => get(`/remisiones?desde=${fecha}&hasta=${fecha}${punto ? `&punto=${punto}` : ''}`), [fecha, punto]);
   const { pendientes, rechazadas } = useCola();
   const total = (s.data || []).filter((r) => !r.anulada).reduce((a, r) => a + r.total, 0);
   return (
@@ -13,11 +15,12 @@ export function Remisiones({ user, cfg }) {
       <main>
         {pendientes.length > 0 && <div className="card"><b>{pendientes.length} venta(s)/abono(s) por enviar</b><div className="mut">Se envían solas al volver la conexión.</div>{pendientes.map((p) => <div key={p.uuid} className="mut">• {p.etiqueta}</div>)}</div>}
         {rechazadas.map((p) => <div key={p.uuid} className="card" style={{ borderColor: 'var(--mal)' }}><b className="mal">No se pudo registrar: {p.etiqueta}</b><div>{p.error}</div><button className="btn sm gris" onClick={() => descartarRechazada(p.uuid)}>Entendido</button></div>)}
+        {user.rol !== 'vendedor' && <SelectorPunto bodegas={bodegas} value={punto} onChange={setPunto} label="Punto" todos />}
         <div className="row" style={{ marginBottom: 10 }}><input type="date" className="q grow" style={{ margin: 0 }} value={fecha} onChange={(e) => setFecha(e.target.value)} /><div className="right"><div className="mut">Vendido</div><b>{money(total)}</b></div></div>
         {s.loading || s.error ? <Cargando s={s} /> : s.data.length === 0 ? <Vacio>Sin remisiones este día</Vacio> : (
           <div className="card list">{s.data.map((r) => (
             <div key={r.id} className="item" onClick={() => ir(`/remisiones/${r.id}`)}>
-              <div className="grow"><div className="bold">{numRem(cfg, r.consecutivo)} · {r.cliente}</div><div className="mut">{r.fecha.slice(11, 16)} · {r.vendedor}</div></div>
+              <div className="grow"><div className="bold">{numRem(cfg, r.consecutivo)} · {r.cliente}</div><div className="mut">{r.fecha.slice(11, 16)} · {r.vendedor}{user.rol !== 'vendedor' ? ` · ${r.ruta ? conPrefijo('Ruta', r.ruta) : 'Mostrador ' + r.bodega}` : ''}</div></div>
               <div className="right"><div className={'bold' + (r.anulada ? ' mal' : '')} style={r.anulada ? { textDecoration: 'line-through' } : {}}>{money(r.total)}</div>
                 {r.anulada ? <span className="tag mal">Anulada</span> : r.total - r.pagado > 0.5 ? <span className="tag warn">Debe {money(r.total - r.pagado)}</span> : <span className="tag ok">Pagada</span>}</div>
             </div>))}</div>
@@ -39,7 +42,7 @@ export function RemisionDetalle({ id, user, cfg }) {
           <>
             <div className="card">
               <div className="row between"><h2 style={{ margin: 0 }}>{numRem(cfg, r.consecutivo)}</h2>{r.anulada ? <span className="tag mal">Anulada</span> : null}</div>
-              <div className="mut">{r.fecha.slice(0, 16)} · {r.ruta || 'Mostrador'} · {r.vendedor}</div>
+              <div className="mut">{r.fecha.slice(0, 16)} · {r.punto} · {r.vendedor}</div>
               <div className="bold" style={{ marginTop: 6 }}>{r.cliente}{r.negocio ? ` · ${r.negocio}` : ''}</div>
               {r.anulada ? <div className="mal">Motivo: {r.motivo_anulacion}</div> : null}
             </div>

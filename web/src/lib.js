@@ -39,7 +39,7 @@ async function raw(method, url, body, opts = {}) {
 }
 
 // GET con respaldo en caché local para poder trabajar sin señal (catálogos)
-const CACHEABLES = ['/productos', '/clientes', '/config', '/rutas'];
+const CACHEABLES = ['/productos', '/clientes', '/config', '/rutas', '/ubicaciones'];
 export async function get(url) {
   const cacheable = CACHEABLES.includes(url.split('?')[0]);
   try {
@@ -147,3 +147,27 @@ export async function descargarPdf(r, cfg, formato = 'ticket') {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
+
+// ---------- Bodegas y puntos de venta ----------
+export const esAdmin = (u) => u?.rol === 'admin';
+export const esEncargado = (u) => u?.rol === 'bodeguero';
+export const puedeGestionar = (u) => u?.rol === 'admin' || u?.rol === 'bodeguero'; // inventario, compras, traslados
+export const ROL_NOMBRE = { admin: 'Administrador', bodeguero: 'Encargado de bodega', vendedor: 'Vendedor de ruta' };
+
+// Bodegas (con sus rutas) que el usuario puede ver; sirve para todos los selectores
+export function useUbicaciones() {
+  const s = useCarga(() => get('/ubicaciones'), []);
+  return { ...s, bodegas: s.data?.bodegas || [] };
+}
+// Lista plana de puntos de venta: el mostrador de cada bodega y cada ruta
+export function puntosDe(bodegas, { mostrador = true } = {}) {
+  const out = [];
+  for (const b of bodegas) {
+    if (mostrador && b.puede_mostrador && b.activa) out.push({ codigo: `B${b.id}`, nombre: `Mostrador · ${b.nombre}`, bodega: b.nombre });
+    for (const r of b.rutas) if (r.activa) out.push({ codigo: `R${r.id}`, nombre: conPrefijo('Ruta', r.nombre), bodega: b.nombre });
+  }
+  return out;
+}
+export const nombreBodega = (bodegas, id) => bodegas.find((b) => b.id === Number(id))?.nombre || '';
+
+export const conPrefijo = (prefijo, nombre) => (String(nombre ?? '').toLowerCase().startsWith(prefijo.toLowerCase()) ? String(nombre) : `${prefijo} ${nombre}`);

@@ -23,6 +23,12 @@ function secreto() {
   return r.valor;
 }
 
+// Usuario con su bodega efectiva: la propia (encargado) o la de su ruta (vendedor)
+export function cargarUsuario(id) {
+  return db.prepare(`SELECT u.id, u.nombre, u.usuario, u.rol, u.ruta_id, u.activo,
+    COALESCE(u.bodega_id, r.bodega_id) AS bodega_id FROM usuarios u LEFT JOIN rutas r ON r.id=u.ruta_id WHERE u.id=?`).get(id);
+}
+
 export const firmar = (u) => jwt.sign({ id: u.id }, secreto(), { expiresIn: '30d' });
 
 export function requireAuth(req, _res, next) {
@@ -32,7 +38,7 @@ export function requireAuth(req, _res, next) {
     if (!token) throw new HttpError(401, 'No autenticado');
     let payload;
     try { payload = jwt.verify(token, secreto()); } catch { throw new HttpError(401, 'Sesión inválida o vencida'); }
-    const u = db.prepare('SELECT id, nombre, usuario, rol, ruta_id, activo FROM usuarios WHERE id=?').get(payload.id);
+    const u = cargarUsuario(payload.id);
     if (!u || !u.activo) throw new HttpError(401, 'Usuario inactivo');
     req.user = u;
     next();

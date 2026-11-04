@@ -1,6 +1,7 @@
-// Ajuste de inventario de la bodega central por conteo físico.
+// Ajuste de inventario de una bodega por conteo físico.
 //   node server/ajustar-inventario.js            -> solo muestra qué cambiaría (no escribe)
 //   node server/ajustar-inventario.js --aplicar  -> aplica los ajustes y los deja en el kardex
+//   Agrega --bodega=ID para otra bodega (por defecto la primera).
 // Usa DB_FILE igual que la app (por defecto data/dulceria.db).
 import { db, tx, getStock, moverStock } from './db.js';
 
@@ -15,7 +16,10 @@ const CONTEO = [
   ['CAJONES GRANDES', 159],
 ];
 const NOTA = 'Conteo físico bodega';
-const BODEGA = 0;
+const arg = process.argv.find((a) => a.startsWith('--bodega='));
+const bodegaId = arg ? Number(arg.split('=')[1]) : db.prepare('SELECT id FROM bodegas ORDER BY id LIMIT 1').get().id;
+if (!db.prepare('SELECT 1 FROM bodegas WHERE id=?').get(bodegaId)) { console.error(`La bodega ${bodegaId} no existe.`); process.exit(1); }
+const BODEGA = `B${bodegaId}`;
 
 const norm = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 const aplicar = process.argv.includes('--aplicar');

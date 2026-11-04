@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { get, post, put, enviar, uuid, money, useCarga, ir, numRem, telWhatsApp } from '../lib.js';
-import { Header, Cargando, Vacio, Modal, Campo, toast, useAccion } from '../ui.jsx';
+import { get, post, put, enviar, uuid, money, useCarga, ir, numRem, telWhatsApp, useUbicaciones, puedeGestionar } from '../lib.js';
+import { Header, Cargando, Vacio, Modal, Campo, toast, useAccion, SelectorPunto } from '../ui.jsx';
 import { NuevoCliente } from './Vender.jsx';
 
-export function Clientes() {
+export function Clientes({ user }) {
   const s = useCarga(() => get('/clientes'), []);
+  const { bodegas } = useUbicaciones();
   const [q, setQ] = useState('');
   const [nuevo, setNuevo] = useState(false);
   const lista = (s.data || []).filter((c) => `${c.nombre} ${c.negocio || ''} ${c.telefono || ''}`.toLowerCase().includes(q.toLowerCase()));
@@ -21,7 +22,7 @@ export function Clientes() {
             </div>))}</div>
         )}
       </main>
-      {nuevo && <NuevoCliente onClose={() => setNuevo(false)} onCreado={() => { setNuevo(false); s.recargar(); }} />}
+      {nuevo && <NuevoCliente user={user} bodegas={bodegas} onClose={() => setNuevo(false)} onCreado={() => { setNuevo(false); s.recargar(); }} />}
     </>
   );
 }
@@ -59,22 +60,33 @@ export function ClienteDetalle({ id, user, cfg }) {
           </>
         )}
       </main>
-      {abonar && <Abono cliente={c} onClose={() => setAbonar(false)} onHecho={() => { setAbonar(false); s.recargar(); }} />}
+      {abonar && <Abono cliente={c} user={user} onClose={() => setAbonar(false)} onHecho={() => { setAbonar(false); s.recargar(); }} />}
       {editar && <EditarCliente cliente={c} user={user} onClose={() => setEditar(false)} onHecho={() => { setEditar(false); s.recargar(); }} />}
     </>
   );
 }
 
-export function Abono({ cliente, onClose, onHecho }) {
+export function Abono({ cliente, user, onClose, onHecho }) {
   const [valor, setValor] = useState(String(Math.round(cliente.saldo)));
+  const [metodo, setMetodo] = useState('efectivo');
   const [uid] = useState(uuid());
+  const { bodegas } = useUbicaciones();
+  // el vendedor cobra siempre en su ruta; el encargado por defecto en su mostrador; el administrador elige
+  const [punto, setPunto] = useState(user?.rol === 'bodeguero' ? `B${user.bodega_id}` : '');
+  const elige = user?.rol !== 'vendedor';
   const [ocupado, run] = useAccion();
   return (
     <Modal titulo={`Abono de ${cliente.nombre}`} onClose={onClose}>
       <p className="mut">Deuda actual: <b>{money(cliente.saldo)}</b>. El abono se aplica a las remisiones más antiguas primero.</p>
       <Campo label="Valor recibido" inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} autoFocus />
+      <div className="row" style={{ marginBottom: 12 }}>
+        <button className={'btn sm grow ' + (metodo === 'efectivo' ? '' : 'gris')} onClick={() => setMetodo('efectivo')}>Efectivo</button>
+        <button className={'btn sm grow ' + (metodo === 'transferencia' ? '' : 'gris')} onClick={() => setMetodo('transferencia')}>Transferencia</button>
+      </div>
+      {elige && <SelectorPunto bodegas={bodegas} value={punto} onChange={setPunto} label="Cobrado en" />}
       <button className="btn block" disabled={ocupado} onClick={() => run(async () => {
-        const r = await enviar('abono', { uuid: uid, cliente_id: cliente.id, valor: Number(valor) }, `Abono ${cliente.nombre} · ${money(valor)}`);
+        if (elige && !punto) throw new Error('Elige dónde se cobró (ruta o mostrador)');
+        const r = await enviar('abono', { uuid: uid, cliente_id: cliente.id, valor: Number(valor), metodo, punto: elige ? punto : undefined }, `Abono ${cliente.nombre} · ${money(valor)}`);
         toast(r.pendiente ? 'Sin señal: el abono se enviará después' : 'Abono registrado');
         onHecho();
       })}>Registrar abono</button>
@@ -84,7 +96,7 @@ export function Abono({ cliente, onClose, onHecho }) {
 
 function EditarCliente({ cliente, user, onClose, onHecho }) {
   const [f, setF] = useState({ ...cliente });
-  const rutas = useCarga(() => (user.rol === 'admin' ? get('/rutas') : []), []);
+  const { bodegas } = useUbicaciones();
   const [ocupado, run] = useAccion();
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   return (
@@ -94,24 +106,30 @@ function EditarCliente({ cliente, user, onClose, onHecho }) {
       <Campo label="Teléfono" inputMode="tel" value={f.telefono || ''} onChange={set('telefono')} />
       <Campo label="Dirección" value={f.direccion || ''} onChange={set('direccion')} />
       <Campo label="Documento (CC/NIT)" value={f.documento || ''} onChange={set('documento')} />
-      {user.rol === 'admin' && <label className="f">Ruta<select value={f.ruta_id ?? ''} onChange={(e) => setF({ ...f, ruta_id: e.target.value || null })}><option value="">Sin ruta</option>{(rutas.data || []).map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}</select></label>}
+      {user.rol !== 'vendedor' && <SelectorPunto bodegas={bodegas} value={f.ruta_id ? `R${f.ruta_id}` : ''} onChange={(v) => setF({ ...f, ruta_id: v.startsWith('R') ? Number(v.slice(1)) : null })} label="Ruta del cliente" mostrador={false} vacio="Sin ruta" />}
       <button className="btn block" disabled={ocupado} onClick={() => run(async () => { await put(`/clientes/${cliente.id}`, f); onHecho(); }, 'Guardado')}>Guardar</button>
     </Modal>
   );
 }
 
 export function Cartera({ user }) {
-  const s = useCarga(() => get('/cartera'), []);
+  const { bodegas } = useUbicaciones();
+  const [punto, setPunto] = useState('');
+  const [q, setQ] = useState('');
+  const s = useCarga(() => get(`/cartera${punto ? `?punto=${punto}` : ''}`), [punto]);
   const [sel, setSel] = useState(null);
+  const lista = (s.data?.clientes || []).filter((c) => `${c.nombre} ${c.negocio || ''}`.toLowerCase().includes(q.toLowerCase()));
   return (
     <>
       <Header titulo="Cartera" />
       <main>
+        {user.rol !== 'vendedor' && <SelectorPunto bodegas={bodegas} value={punto} onChange={setPunto} label="Filtrar por" todos />}
+        <input className="q" placeholder="Buscar cliente…" value={q} onChange={(e) => setQ(e.target.value)} />
         {s.loading || s.error ? <Cargando s={s} /> : (
           <>
-            <div className="card"><div className="mut">Total por cobrar</div><div className="big warn">{money(s.data.total)}</div></div>
-            {s.data.clientes.length === 0 ? <Vacio>🎉 Nadie te debe</Vacio> : (
-              <div className="card list">{s.data.clientes.map((c) => (
+            <div className="card"><div className="mut">Total por cobrar{punto || q ? ' (filtrado)' : ''}</div><div className="big warn">{money(q ? lista.reduce((a, c) => a + c.saldo, 0) : s.data.total)}</div></div>
+            {lista.length === 0 ? <Vacio>🎉 Nadie te debe</Vacio> : (
+              <div className="card list">{lista.map((c) => (
                 <div key={c.id} className="item">
                   <div className="grow" onClick={() => ir(`/clientes/${c.id}`)}><div className="bold">{c.nombre}</div><div className="mut">{c.negocio} · desde {c.mas_antigua.slice(0, 10)}</div></div>
                   <div className="right"><b>{money(c.saldo)}</b><div className="row" style={{ marginTop: 4 }}><button className="btn sm" onClick={() => setSel(c)}>Abonar</button>
@@ -122,7 +140,7 @@ export function Cartera({ user }) {
           </>
         )}
       </main>
-      {sel && <Abono cliente={sel} onClose={() => setSel(null)} onHecho={() => { setSel(null); s.recargar(); }} />}
+      {sel && <Abono cliente={sel} user={user} onClose={() => setSel(null)} onHecho={() => { setSel(null); s.recargar(); }} />}
     </>
   );
 }
