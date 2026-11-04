@@ -8,6 +8,11 @@ const TIPOS = {
     ayuda: 'Columnas: nombre (obligatoria), código, unidad, precio, costo, mínimo. Si el producto ya existe (por código o nombre) se actualiza solo lo que traiga el archivo.',
     plantilla: 'nombre;codigo;unidad;precio;costo;minimo\nJULYPAN GRANDE;JP1;und;1500;1000;20\nESTIBA JULYPAN;JP-E;estiba;300000;200000;2\n',
   },
+  presentaciones: {
+    titulo: 'Presentaciones', solo: 'admin',
+    ayuda: 'Define cajas, estibas, etc. de productos que ya existen. Columnas: producto (o código), presentación, equivalencia (cuántas unidades trae) y precio (opcional). Una fila por presentación.',
+    plantilla: 'producto;presentacion;equivalencia;precio\nJULYPAN GRANDE;caja;20;\nJULYPAN GRANDE;estiba;400;560000\n',
+  },
   clientes: {
     titulo: 'Clientes',
     ayuda: 'Columnas: nombre (obligatoria), negocio, teléfono, dirección, cédula/NIT, ruta. La ruta debe existir (escríbela como "Norte" o "Ruta Norte"). Si el cliente ya existe (por cédula, teléfono o nombre y negocio) se actualiza.',
@@ -15,8 +20,8 @@ const TIPOS = {
   },
   inventario: {
     titulo: 'Conteo de inventario',
-    ayuda: 'Columnas: producto (o código) y cantidad. El inventario de la ubicación elegida queda igual al conteo; las diferencias quedan en el kardex como ajuste. Los productos deben existir.',
-    plantilla: 'producto;cantidad\nJULYPAN GRANDE;25898\nESTIBA JULYPAN;130\n',
+    ayuda: 'Columnas: producto (o código), cantidad y, si cuentas por mayor, presentación (ej. 130 · estiba). El inventario de la ubicación elegida queda igual al conteo; las diferencias quedan en el kardex como ajuste. Los productos deben existir.',
+    plantilla: 'producto;cantidad;presentacion\nJULYPAN GRANDE;25898;und\nJULYPAN GRANDE;130;estiba\n',
   },
 };
 
@@ -103,7 +108,7 @@ export function Importar({ user }) {
               {res.filas.slice(0, 300).map((f) => (
                 <div key={f.linea} className="item" style={{ cursor: 'default', alignItems: 'flex-start' }}>
                   <div className="grow">
-                    <div className="bold">{f.nombre || f.producto || '(sin nombre)'}{f.negocio ? ` · ${f.negocio}` : ''}</div>
+                    <div className="bold">{f.nombre || f.producto || '(sin nombre)'}{f.presentacion ? ` · ${f.presentacion}` : ''}{f.negocio ? ` · ${f.negocio}` : ''}</div>
                     {f.error ? <div className="mal">Línea {f.linea}: {f.error}</div>
                       : f.diferencia !== undefined ? <div className="mut">Sistema {qty(f.actual)} → conteo {qty(f.conteo)} ({f.diferencia > 0 ? '+' : ''}{qty(f.diferencia)})</div>
                       : f.cambios?.length ? <div className="mut">{f.cambios.join(' · ')}</div> : null}

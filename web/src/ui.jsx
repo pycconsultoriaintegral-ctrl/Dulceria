@@ -170,3 +170,14 @@ export function SelectorBodega({ bodegas, value, onChange, label = 'Bodega', vac
     </label>
   );
 }
+
+// Presentación en la que se cuenta una línea: unidad base o una de las presentaciones del producto
+export function SelectorPresentacion({ producto, value, onChange, style }) {
+  if (!producto.presentaciones?.length) return null;
+  return (
+    <select value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)} style={{ padding: '6px 8px', border: '1px solid var(--bd)', borderRadius: 9, background: '#fff', fontSize: 14, ...style }} aria-label="Presentación">
+      <option value="">{producto.unidad || 'und'}</option>
+      {producto.presentaciones.map((x) => <option key={x.id} value={x.id}>{x.nombre} (×{x.factor})</option>)}
+    </select>
+  );
+}

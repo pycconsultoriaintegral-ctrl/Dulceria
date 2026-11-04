@@ -1,8 +1,9 @@
 // Configuración, bodegas, rutas, usuarios, productos y selector de ubicaciones
 import { Router } from 'express';
-import { db, HttpError, getConfig } from '../db.js';
+import { db, tx, HttpError, getConfig } from '../db.js';
 import { soloAdmin, hashClave } from '../auth.js';
 import { wrap, n, num, req_, entero } from '../util.js';
+import { presentacionesDe, guardarPresentaciones } from '../presentaciones.js';
 import { B, R, getBodega, getRuta, ubicacionesPermitidas, esAdminOBodeguero, parseUb, puedeUb } from '../scope.js';
 
 const router = Router();
@@ -118,9 +119,14 @@ router.get('/productos', (req, res) => {
   const rows = db.prepare(`SELECT p.*, COALESCE(s.cantidad,0) AS stock_punto FROM productos p
     LEFT JOIN stock s ON s.producto_id=p.id AND s.ubicacion=? WHERE p.activo=1 OR ?=1 ORDER BY p.nombre`).all(ub ?? '-', req.query.todos && u.rol === 'admin' ? 1 : 0);
   if (!esAdminOBodeguero(u)) for (const p of rows) delete p.costo;
+  const pres = presentacionesDe(rows.map((p) => p.id));
+  for (const p of rows) p.presentaciones = pres.get(p.id) ?? [];
   res.json(rows);
 });
 function guardarProducto(req, id) {
+  return tx(() => guardarProductoTx(req, id));
+}
+function guardarProductoTx(req, id) {
   const b = req.body;
   const nombre = req_(b.nombre, 'El nombre es obligatorio');
   const precio = num(b.precio ?? 0, 'Precio'), costo = num(b.costo ?? 0, 'Costo');
@@ -129,10 +135,13 @@ function guardarProducto(req, id) {
   if (id) {
     db.prepare('UPDATE productos SET codigo=?,nombre=?,unidad=?,precio=?,costo=?,stock_minimo=?,activo=COALESCE(?,activo) WHERE id=?')
       .run(n(b.codigo), nombre, b.unidad || 'und', precio, costo, minimo, b.activo === undefined ? null : Number(b.activo), id);
+    guardarPresentaciones(id, b.presentaciones);
     return id;
   }
-  return Number(db.prepare('INSERT INTO productos (codigo,nombre,unidad,precio,costo,stock_minimo) VALUES (?,?,?,?,?,?)')
+  const nuevo = Number(db.prepare('INSERT INTO productos (codigo,nombre,unidad,precio,costo,stock_minimo) VALUES (?,?,?,?,?,?)')
     .run(n(b.codigo), nombre, b.unidad || 'und', precio, costo, minimo).lastInsertRowid);
+  guardarPresentaciones(nuevo, b.presentaciones);
+  return nuevo;
 }
 router.post('/productos', soloAdmin, wrap((req, res) => res.json({ id: guardarProducto(req) })));
 router.put('/productos/:id', soloAdmin, wrap((req, res) => res.json({ id: guardarProducto(req, entero(req.params.id)) })));

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { get, post, money, qty, useCarga, useUbicaciones, esAdmin, nombreBodega } from '../lib.js';
-import { Header, Cargando, Vacio, Modal, Campo, Stepper, useAccion, SelectorBodega } from '../ui.jsx';
+import { get, post, money, qty, useCarga, useUbicaciones, esAdmin, nombreBodega, factorDe } from '../lib.js';
+import { Header, Cargando, Vacio, Modal, Campo, Stepper, useAccion, SelectorBodega, SelectorPresentacion } from '../ui.jsx';
 
 export function Compras({ user }) {
   const { bodegas } = useUbicaciones();
@@ -30,7 +30,7 @@ export function Compras({ user }) {
       {nprov && <Proveedores onClose={() => { setNprov(false); prov.recargar(); }} />}
       {det && <Modal titulo={`Compra #${det.id}`} onClose={() => setDet(null)}>
         <div className="mut">{det.fecha.slice(0, 16)} · {det.proveedor || 'Sin proveedor'} · Bodega {det.bodega}</div>
-        <table className="t"><tbody>{det.items.map((i) => <tr key={i.id}><td>{i.nombre}</td><td className="n">{qty(i.cantidad)} × {money(i.costo)}</td></tr>)}</tbody></table>
+        <table className="t"><tbody>{det.items.map((i) => <tr key={i.id}><td>{i.nombre}{i.presentacion ? ` (${i.presentacion})` : ''}</td><td className="n">{qty(i.cantidad)} × {money(i.costo)}</td></tr>)}</tbody></table>
         <div className="right big">{money(det.total)}</div><div className="right mut">Pagado {money(det.pagado)}</div>
         {esAdmin(user) && !det.anulada && det.total - det.pagado > 0.5 && <button className="btn block" style={{ marginTop: 8 }} disabled={ocupado} onClick={() => { const v = window.prompt('Valor del pago al proveedor', Math.round(det.total - det.pagado)); if (v) run(async () => { await post(`/compras/${det.id}/pago`, { valor: Number(v) }); setDet(null); s.recargar(); prov.recargar(); }, 'Pago registrado'); }}>Registrar pago</button>}
         {esAdmin(user) && !det.anulada && <button className="btn peligro block" style={{ marginTop: 8 }} disabled={ocupado} onClick={() => { if (window.confirm('¿Anular la compra? Se descuenta el inventario que entró.')) run(async () => { await post(`/compras/${det.id}/anular`); setDet(null); s.recargar(); }, 'Compra anulada'); }}>Anular compra</button>}
@@ -48,7 +48,7 @@ function NuevaCompra({ user, bodegas, proveedores, onClose, onHecho }) {
   const [q, setQ] = useState('');
   const [ocupado, run] = useAccion();
   const lista = (prods.data || []).filter((p) => p.activo && p.nombre.toLowerCase().includes(q.toLowerCase()));
-  const items = Object.entries(it).filter(([, v]) => v.cantidad > 0).map(([id, v]) => ({ producto_id: +id, cantidad: v.cantidad, costo: v.costo }));
+  const items = Object.entries(it).filter(([, v]) => v.cantidad > 0).map(([id, v]) => ({ producto_id: +id, presentacion_id: v.pres || undefined, cantidad: v.cantidad, costo: v.costo }));
   const total = items.reduce((a, i) => a + i.cantidad * i.costo, 0);
   return (
     <Modal titulo="Registrar compra" onClose={onClose}>
@@ -57,11 +57,20 @@ function NuevaCompra({ user, bodegas, proveedores, onClose, onHecho }) {
       <label className="f">Proveedor<select value={prov} onChange={(e) => setProv(e.target.value)}><option value="">Sin proveedor</option>{proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select></label>
       <Campo label="No. factura del proveedor (opcional)" value={factura} onChange={(e) => setFactura(e.target.value)} />
       <input className="q" placeholder="Buscar producto…" value={q} onChange={(e) => setQ(e.target.value)} />
-      {lista.map((p) => { const v = it[p.id]; return (
-        <div key={p.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }} className="row between">
-          <div className="grow"><div className="bold">{p.nombre}</div>{v?.cantidad > 0 ? <div className="mut">Costo unit. <input style={{ width: 80, padding: 3 }} inputMode="decimal" value={v.costo} onChange={(e) => setIt({ ...it, [p.id]: { ...v, costo: Number(e.target.value) || 0 } })} /></div> : <div className="mut">último costo {money(p.costo)}</div>}</div>
-          <Stepper value={v?.cantidad || 0} onChange={(c) => setIt({ ...it, [p.id]: { cantidad: c, costo: v?.costo ?? p.costo } })} />
-        </div>); })}
+      {lista.map((p) => {
+        const v = it[p.id];
+        const pres = v?.pres ?? null;
+        const costoLista = Math.round(p.costo * factorDe(p, pres) * 100) / 100; // último costo por unidad x lo que trae la presentación
+        return (
+          <div key={p.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }} className="row between">
+            <div className="grow"><div className="bold">{p.nombre}</div>{v?.cantidad > 0 ? <div className="mut">Costo por {pres ? p.presentaciones.find((x) => x.id === pres)?.nombre : p.unidad} <input style={{ width: 90, padding: 3 }} inputMode="decimal" value={v.costo} onChange={(e) => setIt({ ...it, [p.id]: { ...v, costo: Number(e.target.value) || 0 } })} /></div> : <div className="mut">último costo {money(costoLista)}</div>}</div>
+            <div className="row" style={{ gap: 6 }}>
+              <SelectorPresentacion producto={p} value={pres} onChange={(x) => setIt({ ...it, [p.id]: { cantidad: v?.cantidad ?? 0, pres: x, costo: Math.round(p.costo * factorDe(p, x) * 100) / 100 } })} />
+              <Stepper value={v?.cantidad || 0} onChange={(c) => setIt({ ...it, [p.id]: { cantidad: c, pres, costo: v?.costo ?? costoLista } })} />
+            </div>
+          </div>
+        );
+      })}
       <Campo label={`Pagado ahora (vacío = pagó todo ${money(total)})`} inputMode="decimal" value={pagado} onChange={(e) => setPagado(e.target.value)} />
       <div className="row between"><b>Total</b><span className="big">{money(total)}</span></div>
       <button className="btn block" style={{ marginTop: 8 }} disabled={ocupado || !items.length || !bodega} onClick={() => run(async () => { await post('/compras', { bodega_id: Number(bodega), proveedor_id: prov || null, factura, pagado: pagado === '' ? undefined : Number(pagado), items }); onHecho(); }, 'Compra registrada · inventario actualizado')}>Guardar compra</button>

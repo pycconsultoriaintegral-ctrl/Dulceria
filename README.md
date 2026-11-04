@@ -9,7 +9,9 @@ App web móvil (PWA) para controlar **compras, inventario y ventas por ruta** de
 - **Sin señal**: las ventas y abonos hechos sin conexión se guardan en el celular y se envían solos al volver internet (sin duplicarse).
 - **Inventario** por bodega y por ruta, resumen general, ajustes por conteo físico y kardex.
 - **Compras**: proveedores, costo promedio ponderado, deuda con proveedores y pagos; cada compra llega a una bodega.
-- **Importar desde Excel**: productos, clientes y el conteo de inventario de una bodega o ruta, pegando las filas copiadas de Excel o subiendo un CSV. Siempre hay una **vista previa** (nuevos, actualizaciones, errores por fila) antes de guardar; entiende los números colombianos (`$ 1.200`, `1.200,50`).
+- **Presentaciones**: un producto puede tener unidad, caja, estiba, etc., cada una con su equivalencia (ej. 1 estiba = 20 cajas = 400 unidades) y su precio. Se puede comprar, trasladar, cargar, contar y vender en cualquier presentación; el inventario siempre se lleva en la unidad base y se muestra desglosado ("13 caja + 16 und").
+- **Control de precios**: el vendedor puede negociar el precio, pero cada línea guarda el precio de lista y los reportes muestran lo vendido por debajo de la lista, por vendedor, junto con los descuentos.
+- **Importar desde Excel**: productos, presentaciones, clientes y el conteo de inventario de una bodega o ruta, pegando las filas copiadas de Excel o subiendo un CSV. Siempre hay una **vista previa** (nuevos, actualizaciones, errores por fila) antes de guardar; entiende los números colombianos (`$ 1.200`, `1.200,50`).
 - **Cartera**: saldo por cliente dentro del alcance de cada usuario, abonos aplicados a las remisiones más antiguas, recordatorio por WhatsApp.
 - **Cierre diario por punto** (cada ruta y cada mostrador): vendido, cobrado, gastos, efectivo a entregar y diferencia.
 - **Reportes**: ventas, utilidad, márgenes, productos top, ventas por bodega/ruta/mostrador, alertas de stock bajo **por bodega**, cartera e inventario valorizado. El administrador puede filtrar por bodega.

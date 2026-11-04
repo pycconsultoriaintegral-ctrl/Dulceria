@@ -171,3 +171,22 @@ export function puntosDe(bodegas, { mostrador = true } = {}) {
 export const nombreBodega = (bodegas, id) => bodegas.find((b) => b.id === Number(id))?.nombre || '';
 
 export const conPrefijo = (prefijo, nombre) => (String(nombre ?? '').toLowerCase().startsWith(prefijo.toLowerCase()) ? String(nombre) : `${prefijo} ${nombre}`);
+
+// ---------- Presentaciones (unidad base, caja, estiba…) ----------
+export const presDe = (p, id) => (id ? p.presentaciones?.find((x) => x.id === Number(id)) : null) || null;
+export const factorDe = (p, id) => presDe(p, id)?.factor ?? 1;
+// precio de lista de una presentación: el suyo, o el de la unidad por la equivalencia
+export const listaDe = (p, id) => { const x = presDe(p, id); return x ? (x.precio ?? Math.round(p.precio * x.factor * 100) / 100) : p.precio; };
+// 1.350 unidades -> "3 estiba + 3 caja + 10 und" (solo si el producto tiene presentaciones)
+export function desglose(cantidad, presentaciones = [], unidad = 'und') {
+  if (!presentaciones.length) return '';
+  let resto = Math.round(Number(cantidad) * 1e6) / 1e6;
+  const partes = [];
+  for (const p of [...presentaciones].sort((a, b) => b.factor - a.factor)) {
+    const n = Math.floor(resto / p.factor + 1e-9);
+    if (n > 0) { partes.push(`${n} ${p.nombre}`); resto = Math.round((resto - n * p.factor) * 1e6) / 1e6; }
+  }
+  if (!partes.length) return '';
+  if (resto > 1e-9) partes.push(`${qty(resto)} ${unidad}`);
+  return partes.join(' + ');
+}

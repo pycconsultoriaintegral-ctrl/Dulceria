@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { db, tx, ahora, HttpError, moverStock } from '../db.js';
 import { soloAdmin } from '../auth.js';
 import { wrap, n, num, r2, entero } from '../util.js';
+import { presentacionDe, aBase } from '../presentaciones.js';
 import { B, esAdmin, esAdminOBodeguero, puedeBodega, exigir, getBodega } from '../scope.js';
 
 const router = Router();
@@ -36,11 +37,14 @@ router.post('/', wrap((req, res) => {
   if (!getBodega(bodegaId)) throw new HttpError(400, 'La bodega no existe');
   const id = tx(() => {
     let total = 0;
+    // cantidad y costo vienen en la presentación comprada (2 estibas a $200.000); el inventario sube en unidades base
     const items = b.items.map((i) => {
       const cantidad = num(i.cantidad, 'Cantidad'), costo = num(i.costo, 'Costo');
       if (cantidad <= 0 || costo < 0) throw new HttpError(400, 'Cantidad y costo deben ser válidos');
+      const producto_id = Number(i.producto_id);
+      const pres = presentacionDe(producto_id, i.presentacion_id);
       total += cantidad * costo;
-      return { producto_id: Number(i.producto_id), cantidad, costo };
+      return { producto_id, cantidad, costo, pres };
     });
     total = r2(total);
     const pagado = b.pagado === undefined || b.pagado === '' ? total : num(b.pagado, 'Pagado');
@@ -50,12 +54,13 @@ router.post('/', wrap((req, res) => {
     for (const i of items) {
       const p = db.prepare('SELECT id, costo FROM productos WHERE id=?').get(i.producto_id);
       if (!p) throw new HttpError(400, 'Producto no existe');
-      // costo promedio ponderado con el stock total actual (todas las bodegas y rutas)
+      // costo promedio ponderado por unidad base, con el stock total actual (todas las bodegas y rutas)
+      const cantBase = aBase(i.cantidad, i.pres), costoBase = i.costo / i.pres.factor;
       const existente = db.prepare('SELECT COALESCE(SUM(cantidad),0) AS q FROM stock WHERE producto_id=?').get(p.id).q;
-      const nuevoCosto = existente > 0 ? r2((existente * p.costo + i.cantidad * i.costo) / (existente + i.cantidad)) : i.costo;
+      const nuevoCosto = existente > 0 ? r2((existente * p.costo + cantBase * costoBase) / (existente + cantBase)) : r2(costoBase);
       db.prepare('UPDATE productos SET costo=? WHERE id=?').run(nuevoCosto, p.id);
-      db.prepare('INSERT INTO compra_items (compra_id,producto_id,cantidad,costo) VALUES (?,?,?,?)').run(cid, p.id, i.cantidad, i.costo);
-      moverStock({ productoId: p.id, ubicacion: B(bodegaId), delta: i.cantidad, tipo: 'compra', costo: i.costo, referencia: `C-${cid}`, usuarioId: req.user.id });
+      db.prepare('INSERT INTO compra_items (compra_id,producto_id,cantidad,costo,factor,presentacion) VALUES (?,?,?,?,?,?)').run(cid, p.id, i.cantidad, i.costo, i.pres.factor, i.pres.nombre);
+      moverStock({ productoId: p.id, ubicacion: B(bodegaId), delta: cantBase, tipo: 'compra', costo: costoBase, referencia: `C-${cid}`, usuarioId: req.user.id });
     }
     return cid;
   });
@@ -68,7 +73,7 @@ router.post('/:id/anular', soloAdmin, wrap((req, res) => {
     if (!c) throw new HttpError(404, 'Compra no encontrada');
     if (c.anulada) throw new HttpError(409, 'La compra ya está anulada');
     for (const i of db.prepare('SELECT * FROM compra_items WHERE compra_id=?').all(c.id))
-      moverStock({ productoId: i.producto_id, ubicacion: B(c.bodega_id), delta: -i.cantidad, tipo: 'anulacion_compra', costo: i.costo, referencia: `C-${c.id}`, usuarioId: req.user.id });
+      moverStock({ productoId: i.producto_id, ubicacion: B(c.bodega_id), delta: -aBase(i.cantidad, { factor: i.factor }), tipo: 'anulacion_compra', costo: i.costo / i.factor, referencia: `C-${c.id}`, usuarioId: req.user.id });
     db.prepare('UPDATE compras SET anulada=1 WHERE id=?').run(c.id);
   });
   res.json({ ok: true });

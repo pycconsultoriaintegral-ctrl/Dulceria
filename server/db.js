@@ -9,7 +9,7 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 // Ubicaciones de inventario: 'B<id>' = bodega, 'R<id>' = inventario en la ruta.
 // Esquema v2: varias bodegas; cada ruta pertenece a una bodega.
-const VERSION_ESQUEMA = 3;
+const VERSION_ESQUEMA = 4;
 
 const DDL = {
   config: (t) => `CREATE TABLE ${t} (clave TEXT PRIMARY KEY, valor TEXT)`,
@@ -23,6 +23,10 @@ const DDL = {
   productos: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, codigo TEXT, nombre TEXT NOT NULL, unidad TEXT DEFAULT 'und',
     precio REAL NOT NULL DEFAULT 0, costo REAL NOT NULL DEFAULT 0, stock_minimo REAL DEFAULT 0, activo INTEGER DEFAULT 1)`,
+  // Presentaciones de un producto: el inventario siempre se lleva en la unidad base; factor = unidades base que trae la presentación
+  presentaciones: (t) => `CREATE TABLE ${t} (
+    id INTEGER PRIMARY KEY, producto_id INTEGER NOT NULL REFERENCES productos(id), nombre TEXT NOT NULL,
+    factor REAL NOT NULL CHECK (factor > 0), precio REAL, activo INTEGER DEFAULT 1, UNIQUE (producto_id, nombre))`,
   stock: (t) => `CREATE TABLE ${t} (
     producto_id INTEGER NOT NULL REFERENCES productos(id), ubicacion TEXT NOT NULL, cantidad REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (producto_id, ubicacion))`,
@@ -37,7 +41,7 @@ const DDL = {
     total REAL NOT NULL, pagado REAL NOT NULL DEFAULT 0, nota TEXT, usuario_id INTEGER, anulada INTEGER DEFAULT 0)`,
   compra_items: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, compra_id INTEGER NOT NULL REFERENCES compras(id), producto_id INTEGER NOT NULL REFERENCES productos(id),
-    cantidad REAL NOT NULL, costo REAL NOT NULL)`,
+    cantidad REAL NOT NULL, costo REAL NOT NULL, factor REAL NOT NULL DEFAULT 1, presentacion TEXT)`,
   clientes: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, nombre TEXT NOT NULL, negocio TEXT, telefono TEXT, direccion TEXT, documento TEXT,
     ruta_id INTEGER REFERENCES rutas(id), activo INTEGER DEFAULT 1)`,
@@ -50,7 +54,8 @@ const DDL = {
     total REAL NOT NULL, pagado REAL NOT NULL DEFAULT 0, nota TEXT, anulada INTEGER DEFAULT 0, motivo_anulacion TEXT)`,
   remision_items: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, remision_id INTEGER NOT NULL REFERENCES remisiones(id), producto_id INTEGER NOT NULL REFERENCES productos(id),
-    descripcion TEXT NOT NULL, cantidad REAL NOT NULL, precio REAL NOT NULL, costo REAL NOT NULL DEFAULT 0)`,
+    descripcion TEXT NOT NULL, cantidad REAL NOT NULL, precio REAL NOT NULL, costo REAL NOT NULL DEFAULT 0,
+    factor REAL NOT NULL DEFAULT 1, presentacion TEXT, precio_lista REAL)`,
   pagos: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, fecha TEXT NOT NULL, cliente_id INTEGER NOT NULL REFERENCES clientes(id),
     remision_id INTEGER REFERENCES remisiones(id), ruta_id INTEGER, bodega_id INTEGER NOT NULL REFERENCES bodegas(id),
@@ -72,7 +77,7 @@ const DDL = {
     id INTEGER PRIMARY KEY, traslado_id INTEGER NOT NULL REFERENCES traslados(id),
     producto_id INTEGER NOT NULL REFERENCES productos(id), cantidad REAL NOT NULL, cantidad_recibida REAL)`,
 };
-const ORDEN = ['config', 'bodegas', 'rutas', 'usuarios', 'productos', 'stock', 'movimientos', 'proveedores', 'compras', 'compra_items',
+const ORDEN = ['config', 'bodegas', 'rutas', 'usuarios', 'productos', 'presentaciones', 'stock', 'movimientos', 'proveedores', 'compras', 'compra_items',
   'clientes', 'remisiones', 'remision_items', 'pagos', 'gastos', 'cierres', 'traslados', 'traslado_items'];
 const INDICES = ['CREATE INDEX IF NOT EXISTS ix_mov_prod ON movimientos(producto_id, fecha)',
   'CREATE INDEX IF NOT EXISTS ix_rem_fecha ON remisiones(fecha)', 'CREATE INDEX IF NOT EXISTS ix_pagos_fecha ON pagos(fecha)'];
@@ -133,6 +138,14 @@ function agregarColumna(tabla, columna, definicion) {
 const MIGRACIONES = {
   // v3: el cierre separa el dinero recibido por transferencia del efectivo
   3: () => agregarColumna('cierres', 'transferencias', 'REAL DEFAULT 0'),
+  // v4: presentaciones (la tabla nueva la crea crearEsquema) y precio de lista en cada línea vendida
+  4: () => {
+    agregarColumna('remision_items', 'factor', 'REAL NOT NULL DEFAULT 1');
+    agregarColumna('remision_items', 'presentacion', 'TEXT');
+    agregarColumna('remision_items', 'precio_lista', 'REAL');
+    agregarColumna('compra_items', 'factor', 'REAL NOT NULL DEFAULT 1');
+    agregarColumna('compra_items', 'presentacion', 'TEXT');
+  },
 };
 
 function aplicarMigraciones() {

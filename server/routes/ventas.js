@@ -5,6 +5,7 @@ import { remisionPdf, remisionTicket } from '../pdf.js';
 import { wrap, n, num, r2, req_, entero, conPrefijo } from '../util.js';
 import { B, R, getRuta, resolverPunto, sqlAlcance, sqlPunto, exigir, puedeRuta, puedeBodega, puedeUb, parseUb } from '../scope.js';
 import { puedeVerCliente } from './clientes.js';
+import { presentacionDe, aBase, precioLista } from '../presentaciones.js';
 
 const router = Router();
 const METODOS = ['efectivo', 'transferencia'];
@@ -30,11 +31,13 @@ router.post('/remisiones', wrap((req, res) => {
       if (!p) throw new HttpError(400, 'Producto no disponible');
       const cantidad = num(i.cantidad, 'Cantidad');
       if (cantidad <= 0) throw new HttpError(400, 'La cantidad debe ser mayor a cero');
-      // el vendedor puede negociar el precio; queda registrado en la remisión
-      const precio = i.precio === undefined ? p.precio : num(i.precio, 'Precio');
+      const pres = presentacionDe(p.id, i.presentacion_id);
+      // el vendedor puede negociar el precio; queda registrado en la remisión junto al precio de lista para poder auditarlo
+      const lista = precioLista(p, pres);
+      const precio = i.precio === undefined ? lista : num(i.precio, 'Precio');
       if (precio < 0) throw new HttpError(400, 'Precio inválido');
       subtotal += cantidad * precio;
-      return { p, cantidad, precio };
+      return { p, pres, cantidad, precio, lista };
     });
     subtotal = r2(subtotal);
     const descuento = r2(num(b.descuento ?? 0, 'Descuento'));
@@ -48,9 +51,10 @@ router.post('/remisiones', wrap((req, res) => {
     const id = Number(db.prepare(`INSERT INTO remisiones (uuid,consecutivo,fecha,cliente_id,ruta_id,bodega_id,usuario_id,tipo_pago,subtotal,descuento,total,pagado,nota)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(n(b.uuid), cons, fecha, cli.id, punto.ruta_id, punto.bodega_id, req.user.id, b.tipo_pago, subtotal, descuento, total, pagado, n(b.nota)).lastInsertRowid);
     for (const i of items) {
-      db.prepare('INSERT INTO remision_items (remision_id,producto_id,descripcion,cantidad,precio,costo) VALUES (?,?,?,?,?,?)')
-        .run(id, i.p.id, i.p.nombre, i.cantidad, i.precio, i.p.costo);
-      moverStock({ productoId: i.p.id, ubicacion: ubDelPunto(punto), delta: -i.cantidad, tipo: 'venta', costo: i.p.costo, referencia: `R-${cons}`, usuarioId: req.user.id });
+      // la línea se guarda tal como se vendió (2 cajas a $30.000); el inventario se descuenta en unidades base
+      db.prepare('INSERT INTO remision_items (remision_id,producto_id,descripcion,cantidad,precio,costo,factor,presentacion,precio_lista) VALUES (?,?,?,?,?,?,?,?,?)')
+        .run(id, i.p.id, i.pres.id ? `${i.p.nombre} (${i.pres.nombre})` : i.p.nombre, i.cantidad, i.precio, i.p.costo * i.pres.factor, i.pres.factor, i.pres.nombre, i.lista);
+      moverStock({ productoId: i.p.id, ubicacion: ubDelPunto(punto), delta: -aBase(i.cantidad, i.pres), tipo: 'venta', costo: i.p.costo, referencia: `R-${cons}`, usuarioId: req.user.id });
     }
     if (pagado > 0) db.prepare('INSERT INTO pagos (fecha,cliente_id,remision_id,ruta_id,bodega_id,usuario_id,valor,metodo) VALUES (?,?,?,?,?,?,?,?)')
       .run(fecha, cli.id, id, punto.ruta_id, punto.bodega_id, req.user.id, pagado, metodo);
@@ -99,7 +103,7 @@ router.post('/remisiones/:id/anular', wrap((req, res) => {
       throw new HttpError(403, 'Solo puedes anular tus remisiones del día. Pide ayuda al encargado de tu bodega o al administrador.');
     const motivo = req_(req.body.motivo, 'Indica el motivo de la anulación');
     for (const i of db.prepare('SELECT * FROM remision_items WHERE remision_id=?').all(r.id))
-      moverStock({ productoId: i.producto_id, ubicacion: ubDelPunto(r), delta: i.cantidad, tipo: 'anulacion_venta', costo: i.costo, referencia: `R-${r.consecutivo}`, usuarioId: req.user.id, permitirNegativo: true });
+      moverStock({ productoId: i.producto_id, ubicacion: ubDelPunto(r), delta: aBase(i.cantidad, { factor: i.factor }), tipo: 'anulacion_venta', costo: i.costo / i.factor, referencia: `R-${r.consecutivo}`, usuarioId: req.user.id, permitirNegativo: true });
     db.prepare('UPDATE remisiones SET anulada=1, motivo_anulacion=? WHERE id=?').run(motivo, r.id);
     db.prepare('UPDATE pagos SET anulado=1 WHERE remision_id=?').run(r.id);
   });

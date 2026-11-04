@@ -32,9 +32,16 @@ export function Reportes({ user }) {
             {d.stock_bajo.length > 0 && <div className="card"><h3 className="warn">⚠ Por reponer</h3>{d.stock_bajo.map((p) => <div key={`${p.bodega_id}-${p.id}`} className="row between"><span>{p.nombre}<div className="mut">{p.bodega}</div></span><b>{qty(p.total)} / mín {qty(p.stock_minimo)}</b></div>)}</div>}
             {d.por_bodega.length > 1 && <div className="card"><h3>Ventas por bodega</h3>{d.por_bodega.map((b) => <div key={b.id} className="row between"><span>{b.bodega} <span className="mut">({b.remisiones})</span></span><b>{money(b.ventas)}</b></div>)}</div>}
             <div className="card"><h3>Ventas por ruta y mostrador</h3>{d.por_ruta.length === 0 ? <div className="mut">Sin ventas</div> : d.por_ruta.map((r) => <div key={r.punto} className="row between"><span>{r.punto} <span className="mut">{r.punto.includes(r.bodega) ? '' : `· ${r.bodega} `}({r.remisiones})</span></span><b>{money(r.ventas)}</b></div>)}</div>
+            <div className="card"><h3>Control de precios</h3>
+              <div className="row between"><span>Descuentos dados en las remisiones</span><b>{money(d.descuentos)}</b></div>
+              <div className="row between"><span>Vendido por debajo del precio de lista</span><b className={d.precios_bajos.valor > 0 ? 'warn' : ''}>{money(d.precios_bajos.valor)}</b></div>
+              {d.precios_bajos.por_vendedor.length === 0 ? <div className="mut">Todas las ventas salieron al precio de lista.</div> : d.precios_bajos.por_vendedor.map((x) => (
+                <div key={x.vendedor} className="row between mut"><span>· {x.vendedor} ({x.lineas} línea{x.lineas === 1 ? '' : 's'})</span><span>{money(x.valor)}</span></div>
+              ))}
+            </div>
             <div className="card"><h3>Productos más vendidos</h3>
               <table className="t"><thead><tr><th>Producto</th><th className="n">Cant.</th><th className="n">Ventas</th><th className="n">Utilidad</th></tr></thead>
-                <tbody>{d.top_productos.map((p) => <tr key={p.nombre}><td>{p.nombre}</td><td className="n">{qty(p.cantidad)}</td><td className="n">{money(p.ventas)}</td><td className="n ok">{money(p.utilidad)}</td></tr>)}</tbody></table></div>
+                <tbody>{d.top_productos.map((p) => <tr key={p.nombre}><td>{p.nombre}</td><td className="n">{qty(p.cantidad)} <span className="mut">{p.unidad}</span></td><td className="n">{money(p.ventas)}</td><td className="n ok">{money(p.utilidad)}</td></tr>)}</tbody></table></div>
             <div className="card"><h3>Ventas por día</h3>{d.por_dia.map((x) => { const max = Math.max(...d.por_dia.map((y) => y.ventas)); return <div key={x.dia} style={{ marginBottom: 6 }}><div className="row between mut"><span>{x.dia}</span><span>{money(x.ventas)}</span></div><div className="bar"><i style={{ width: `${(x.ventas / max) * 100}%` }} /></div></div>; })}</div>
           </>
         )}

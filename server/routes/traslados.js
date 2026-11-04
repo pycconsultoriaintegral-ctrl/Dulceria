@@ -3,6 +3,7 @@
 import { Router } from 'express';
 import { db, tx, ahora, HttpError, moverStock } from '../db.js';
 import { wrap, n, num, entero } from '../util.js';
+import { presentacionDe, aBase, presentacionesDe } from '../presentaciones.js';
 import { B, getBodega, exigir, esAdminOBodeguero, puedeBodega } from '../scope.js';
 
 const router = Router();
@@ -18,6 +19,8 @@ function cargar(req, id) {
   const t = db.prepare(`${SEL} WHERE t.id=? AND ${involucra(req.user)}`).get(id);
   if (!t) throw new HttpError(404, 'Traslado no encontrado');
   t.items = db.prepare(`SELECT i.*, p.nombre, p.unidad FROM traslado_items i JOIN productos p ON p.id=i.producto_id WHERE i.traslado_id=? ORDER BY p.nombre`).all(id);
+  const pres = presentacionesDe(t.items.map((i) => i.producto_id));
+  for (const i of t.items) i.presentaciones = pres.get(i.producto_id) ?? [];
   return t;
 }
 
@@ -39,7 +42,7 @@ router.post('/', wrap((req, res) => {
       .run(ahora(), o, d, req.user.id, n(nota)).lastInsertRowid);
     let hay = false;
     for (const i of items) {
-      const q = num(i.cantidad, 'Cantidad');
+      const q = aBase(num(i.cantidad, 'Cantidad'), presentacionDe(Number(i.producto_id), i.presentacion_id)); // se guarda en unidades base
       if (q <= 0) continue;
       hay = true;
       db.prepare('INSERT INTO traslado_items (traslado_id,producto_id,cantidad) VALUES (?,?,?)').run(tid, Number(i.producto_id), q);
