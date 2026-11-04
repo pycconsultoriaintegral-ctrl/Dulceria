@@ -12,6 +12,7 @@ import traslados from './routes/traslados.js';
 import clientes from './routes/clientes.js';
 import ventas from './routes/ventas.js';
 import reportes from './routes/reportes.js';
+import importar from './routes/importar.js';
 
 export function crearApp() {
   const app = express();
@@ -31,6 +32,7 @@ export function crearApp() {
   api.use('/clientes', clientes);
   api.use(ventas);
   api.use('/reportes', reportes);
+  api.use('/importar', importar);
 
   // ---------- Frontend estático ----------
   const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../web/dist');
