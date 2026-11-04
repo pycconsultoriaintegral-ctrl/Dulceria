@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { post, cerrarSesion, ir, ROL_NOMBRE, puedeGestionar } from '../lib.js';
+import { post, cerrarSesion, ir, ROL_NOMBRE, puedeGestionar, getUser, guardarSesion } from '../lib.js';
 import { Header, Campo, Modal, useAccion } from '../ui.jsx';
 
 export function Mas({ user }) {
@@ -9,7 +9,7 @@ export function Mas({ user }) {
   const items = [
     ['/cartera', '💰', 'Cartera (por cobrar)'], ['/cierre', '🧾', 'Cierre del día'],
     ...(gestiona ? [['/traslados', '🚚', 'Traslados entre bodegas'], ['/compras', '📥', 'Compras y proveedores'], ['/reportes', '📊', 'Reportes'], ['/importar', '📤', 'Importar desde Excel']] : []),
-    ...(admin ? [['/productos', '🍬', 'Productos'], ['/ajustes', '⚙️', 'Ajustes, bodegas, rutas y usuarios']] : []),
+    ...(admin ? [['/productos', '🍬', 'Productos'], ['/actividad', '🕵️', 'Registro de actividad'], ['/ajustes', '⚙️', 'Ajustes, bodegas, rutas y usuarios']] : []),
   ];
   return (
     <>
@@ -30,7 +30,7 @@ function CambiarClave({ onClose }) {
     <Modal titulo="Cambiar contraseña" onClose={onClose}>
       <Campo label="Contraseña actual" type="password" value={a} onChange={(e) => setA(e.target.value)} />
       <Campo label="Nueva contraseña (mín. 6)" type="password" value={n} onChange={(e) => setN(e.target.value)} />
-      <button className="btn block" disabled={ocupado} onClick={() => run(async () => { await post('/auth/clave', { actual: a, nueva: n }); onClose(); }, 'Contraseña actualizada')}>Guardar</button>
+      <button className="btn block" disabled={ocupado} onClick={() => run(async () => { const r = await post('/auth/clave', { actual: a, nueva: n }); if (r.token) guardarSesion(r.token, getUser()); onClose(); }, 'Contraseña actualizada (se cerraron tus otras sesiones)')}>Guardar</button>
     </Modal>
   );
 }

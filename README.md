@@ -12,9 +12,19 @@ App web móvil (PWA) para controlar **compras, inventario y ventas por ruta** de
 - **Presentaciones**: un producto puede tener unidad, caja, estiba, etc., cada una con su equivalencia (ej. 1 estiba = 20 cajas = 400 unidades) y su precio. Se puede comprar, trasladar, cargar, contar y vender en cualquier presentación; el inventario siempre se lleva en la unidad base y se muestra desglosado ("13 caja + 16 und").
 - **Control de precios**: el vendedor puede negociar el precio, pero cada línea guarda el precio de lista y los reportes muestran lo vendido por debajo de la lista, por vendedor, junto con los descuentos.
 - **Importar desde Excel**: productos, presentaciones, clientes y el conteo de inventario de una bodega o ruta, pegando las filas copiadas de Excel o subiendo un CSV. Siempre hay una **vista previa** (nuevos, actualizaciones, errores por fila) antes de guardar; entiende los números colombianos (`$ 1.200`, `1.200,50`).
+- **Exportar a Excel**: ventas por producto, cierres, inventario, movimientos de inventario, cartera y clientes en CSV (separador `;`, tildes y decimales con coma, listo para Excel en español). Cada usuario descarga solo lo de su alcance, y los textos que podrían abrirse como fórmula se neutralizan.
+- **Registro de actividad** (administrador): quién cambió precios o costos, creó o editó usuarios, anuló remisiones, compras o traslados, recibió traslados con faltante, cerró con diferencia o importó datos, y cuándo.
 - **Cartera**: saldo por cliente dentro del alcance de cada usuario, abonos aplicados a las remisiones más antiguas, recordatorio por WhatsApp.
 - **Cierre diario por punto** (cada ruta y cada mostrador): vendido, cobrado, gastos, efectivo a entregar y diferencia.
 - **Reportes**: ventas, utilidad, márgenes, productos top, ventas por bodega/ruta/mostrador, alertas de stock bajo **por bodega**, cartera e inventario valorizado. El administrador puede filtrar por bodega.
+
+### Seguridad
+
+- Las contraseñas se guardan con `scrypt` y nunca en claro; el ingreso se **bloquea 15 minutos** tras 5 intentos fallidos por usuario (y 30 por dirección IP).
+- **Cambiar o restablecer una contraseña cierra las sesiones abiertas** de esa cuenta en otros celulares; desactivar al usuario también la cierra.
+- Cada acción se valida **en el servidor** según el rol (administrador, encargado de bodega, vendedor); ocultar un botón en la pantalla nunca es la única barrera.
+- Encabezados de seguridad (política de contenido, sin incrustación en otros sitios), datos de la API sin caché y CSV protegidos contra inyección de fórmulas.
+- Las pruebas automáticas (`npm test`) corren también en GitHub en cada cambio.
 
 ### Roles
 

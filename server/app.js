@@ -13,12 +13,28 @@ import clientes from './routes/clientes.js';
 import ventas from './routes/ventas.js';
 import reportes from './routes/reportes.js';
 import importar from './routes/importar.js';
+import exportar from './routes/exportar.js';
+import auditoria from './routes/auditoria.js';
 
 export function crearApp() {
   const app = express();
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.use(express.json({ limit: '2mb' }));
+
+  // Encabezados de seguridad. La política de contenido solo permite lo que sirve la propia app
+  // (el estilo en línea es necesario para los estilos de React; los trabajadores blob: para el visor de PDF).
+  const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; "
+    + "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Content-Security-Policy', CSP);
+    if (req.path.startsWith('/api')) res.setHeader('Cache-Control', 'no-store'); // los datos nunca se guardan en cachés intermedias
+    next();
+  });
 
   const api = express.Router();
   app.use('/api', api);
@@ -33,12 +49,17 @@ export function crearApp() {
   api.use(ventas);
   api.use('/reportes', reportes);
   api.use('/importar', importar);
+  api.use('/exportar', exportar);
+  api.use('/auditoria', auditoria);
 
   // ---------- Frontend estático ----------
   const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../web/dist');
   if (fs.existsSync(dist)) {
-    app.use(express.static(dist));
-    app.get(/^\/(?!api).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+    // Los archivos con huella en el nombre (assets/*) son inmutables; el resto debe revalidarse para que las actualizaciones lleguen
+    app.use(express.static(dist, {
+      setHeaders: (res, archivo) => res.setHeader('Cache-Control', archivo.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache'),
+    }));
+    app.get(/^\/(?!api).*/, (_req, res) => { res.setHeader('Cache-Control', 'no-cache'); res.sendFile(path.join(dist, 'index.html')); });
   }
 
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Ruta no encontrada')));

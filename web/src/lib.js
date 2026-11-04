@@ -190,3 +190,13 @@ export function desglose(cantidad, presentaciones = [], unidad = 'und') {
   if (resto > 1e-9) partes.push(`${qty(resto)} ${unidad}`);
   return partes.join(' + ');
 }
+
+// Descarga un CSV del servidor (con la sesión) para abrirlo en Excel
+export async function descargarCsv(url, nombre) {
+  const archivo = await blob(url);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(archivo);
+  a.download = `${nombre}-${hoyStr()}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}

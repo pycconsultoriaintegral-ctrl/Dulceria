@@ -35,6 +35,11 @@ git pull && docker compose up -d --build
 ```
 Los datos viven en el volumen `datos` y no se pierden al actualizar.
 
+## Al actualizar desde una versión anterior
+- La base de datos se **migra sola** al arrancar (no se pierde nada); haz una copia antes si quieres tranquilidad: `cp -r respaldos respaldos-antes`.
+- Quienes tengan la sesión abierta en el celular tendrán que **ingresar de nuevo** una vez (las sesiones ahora se invalidan al cambiar la contraseña).
+- Si alguien se bloquea por intentos fallidos, espera 15 minutos o reinicia el servicio: `docker compose restart app`.
+
 ## Comandos útiles
 - Ver registros: `docker compose logs -f app`
 - Estado: `docker compose ps`

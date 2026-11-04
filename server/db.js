@@ -9,7 +9,7 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 // Ubicaciones de inventario: 'B<id>' = bodega, 'R<id>' = inventario en la ruta.
 // Esquema v2: varias bodegas; cada ruta pertenece a una bodega.
-const VERSION_ESQUEMA = 4;
+const VERSION_ESQUEMA = 5;
 
 const DDL = {
   config: (t) => `CREATE TABLE ${t} (clave TEXT PRIMARY KEY, valor TEXT)`,
@@ -67,6 +67,10 @@ const DDL = {
     id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, punto TEXT NOT NULL, ruta_id INTEGER, bodega_id INTEGER NOT NULL REFERENCES bodegas(id),
     usuario_id INTEGER, ventas_contado REAL, abonos REAL, transferencias REAL DEFAULT 0, gastos REAL, esperado REAL, entregado REAL, diferencia REAL, nota TEXT,
     UNIQUE (fecha, punto))`,
+  // Registro de actividad: quién hizo qué (cambios de precios, usuarios, anulaciones, importaciones…)
+  auditoria: (t) => `CREATE TABLE ${t} (
+    id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, usuario_id INTEGER, usuario TEXT, accion TEXT NOT NULL,
+    entidad TEXT NOT NULL, entidad_id INTEGER, detalle TEXT)`,
   // Traslados entre bodegas: salen de la origen al enviar y entran a la destino al recibir
   traslados: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, origen_id INTEGER NOT NULL REFERENCES bodegas(id),
@@ -78,9 +82,9 @@ const DDL = {
     producto_id INTEGER NOT NULL REFERENCES productos(id), cantidad REAL NOT NULL, cantidad_recibida REAL)`,
 };
 const ORDEN = ['config', 'bodegas', 'rutas', 'usuarios', 'productos', 'presentaciones', 'stock', 'movimientos', 'proveedores', 'compras', 'compra_items',
-  'clientes', 'remisiones', 'remision_items', 'pagos', 'gastos', 'cierres', 'traslados', 'traslado_items'];
+  'clientes', 'remisiones', 'remision_items', 'pagos', 'gastos', 'cierres', 'traslados', 'traslado_items', 'auditoria'];
 const INDICES = ['CREATE INDEX IF NOT EXISTS ix_mov_prod ON movimientos(producto_id, fecha)',
-  'CREATE INDEX IF NOT EXISTS ix_rem_fecha ON remisiones(fecha)', 'CREATE INDEX IF NOT EXISTS ix_pagos_fecha ON pagos(fecha)'];
+  'CREATE INDEX IF NOT EXISTS ix_rem_fecha ON remisiones(fecha)', 'CREATE INDEX IF NOT EXISTS ix_pagos_fecha ON pagos(fecha)', 'CREATE INDEX IF NOT EXISTS ix_aud_fecha ON auditoria(fecha)'];
 
 const existe = (t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(t);
 
@@ -146,6 +150,8 @@ const MIGRACIONES = {
     agregarColumna('compra_items', 'factor', 'REAL NOT NULL DEFAULT 1');
     agregarColumna('compra_items', 'presentacion', 'TEXT');
   },
+  // v5: registro de actividad (la tabla nueva la crea crearEsquema)
+  5: () => {},
 };
 
 function aplicarMigraciones() {

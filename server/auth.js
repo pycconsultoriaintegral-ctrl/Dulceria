@@ -29,7 +29,9 @@ export function cargarUsuario(id) {
     COALESCE(u.bodega_id, r.bodega_id) AS bodega_id FROM usuarios u LEFT JOIN rutas r ON r.id=u.ruta_id WHERE u.id=?`).get(id);
 }
 
-export const firmar = (u) => jwt.sign({ id: u.id }, secreto(), { expiresIn: '30d' });
+// El token lleva una huella de la contraseña: al cambiarla (o restablecerla) las sesiones anteriores dejan de valer
+const huella = (claveHash) => crypto.createHash('sha256').update(claveHash).digest('hex').slice(0, 16);
+export const firmar = (u) => jwt.sign({ id: u.id, v: huella(u.clave_hash) }, secreto(), { expiresIn: '30d' });
 
 export function requireAuth(req, _res, next) {
   try {
@@ -40,6 +42,8 @@ export function requireAuth(req, _res, next) {
     try { payload = jwt.verify(token, secreto()); } catch { throw new HttpError(401, 'Sesión inválida o vencida'); }
     const u = cargarUsuario(payload.id);
     if (!u || !u.activo) throw new HttpError(401, 'Usuario inactivo');
+    const actual = db.prepare('SELECT clave_hash FROM usuarios WHERE id=?').get(payload.id)?.clave_hash;
+    if (!payload.v || !actual || payload.v !== huella(actual)) throw new HttpError(401, 'Tu sesión terminó (cambió la contraseña). Ingresa de nuevo.');
     req.user = u;
     next();
   } catch (e) { next(e); }
