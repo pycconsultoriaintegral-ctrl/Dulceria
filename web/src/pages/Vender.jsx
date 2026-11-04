@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { get, post, enviar, uuid, money, qty, useCarga, ir, compartirRemision, abrirPdf, numRem, useUbicaciones } from '../lib.js';
-import { Header, Cargando, Stepper, Modal, Campo, toast, useAccion, SelectorPunto } from '../ui.jsx';
+import { get, post, enviar, uuid, money, qty, useCarga, ir, compartirRemision, abrirPdf, numRem, useUbicaciones, factorDe, listaDe, desglose } from '../lib.js';
+import { Header, Cargando, Stepper, Modal, Campo, toast, useAccion, SelectorPunto, SelectorPresentacion } from '../ui.jsx';
 
 export default function Vender({ user, cfg }) {
   const elige = user.rol !== 'vendedor'; // el vendedor siempre vende de su ruta; los demás eligen el punto de venta
@@ -28,20 +28,22 @@ export default function Vender({ user, cfg }) {
   const total = Math.max(0, subtotal - (Number(desc) || 0));
   const filtrados = useMemo(() => lista.filter((p) => p.nombre.toLowerCase().includes(buscaProd.toLowerCase())), [lista, buscaProd]);
 
-  const setCant = (p, c) => setItems((it) => ({ ...it, [p.id]: { precio: it[p.id]?.precio ?? p.precio, cantidad: c } }));
-  const setPrecio = (p, v) => setItems((it) => ({ ...it, [p.id]: { cantidad: it[p.id]?.cantidad ?? 0, precio: Number(v) || 0 } }));
+  // cada línea lleva su presentación (unidad, caja, estiba…), la cantidad y el precio en esa presentación
+  const setCant = (p, c) => setItems((it) => ({ ...it, [p.id]: { pres: it[p.id]?.pres ?? null, precio: it[p.id]?.precio ?? listaDe(p, it[p.id]?.pres), cantidad: c } }));
+  const setPrecio = (p, v) => setItems((it) => ({ ...it, [p.id]: { pres: it[p.id]?.pres ?? null, cantidad: it[p.id]?.cantidad ?? 0, precio: Number(v) || 0 } }));
+  const setPres = (p, pres) => setItems((it) => ({ ...it, [p.id]: { pres, precio: listaDe(p, pres), cantidad: Math.min(it[p.id]?.cantidad ?? 0, Math.floor(p.stock_punto / factorDe(p, pres))) } }));
 
   const confirmar = () => run(async () => {
     if (elige && !punto) throw new Error('Elige el punto de venta');
     if (!cliente) throw new Error('Elige el cliente');
     if (!sel.length) throw new Error('Agrega al menos un producto');
-    const sinStock = sel.find((p) => items[p.id].cantidad > p.stock_punto);
+    const sinStock = sel.find((p) => items[p.id].cantidad * factorDe(p, items[p.id].pres) > p.stock_punto);
     if (sinStock) throw new Error(`Solo hay ${qty(sinStock.stock_ruta)} de "${sinStock.nombre}" en la ruta`);
     if (tipo === 'credito' && (Number(abono) || 0) > total) throw new Error('El abono no puede superar el total');
     const payload = {
       uuid: uid, cliente_id: cliente.id, tipo_pago: tipo, metodo, abono: tipo === 'credito' ? Number(abono) || 0 : 0,
       descuento: Number(desc) || 0, nota, punto: elige ? punto : undefined,
-      items: sel.map((p) => ({ producto_id: p.id, cantidad: items[p.id].cantidad, precio: items[p.id].precio })),
+      items: sel.map((p) => ({ producto_id: p.id, presentacion_id: items[p.id].pres || undefined, cantidad: items[p.id].cantidad, precio: items[p.id].precio })),
     };
     const r = await enviar('venta', payload, `${cliente.nombre} · ${money(total)}`);
     if (r.pendiente) setHecho({ pendiente: true, total });
@@ -82,17 +84,25 @@ export default function Vender({ user, cfg }) {
             <div className="list">
               {filtrados.map((p) => {
                 const it = items[p.id];
+                const pres = it?.pres ?? null;
+                const factor = factorDe(p, pres);
+                const max = Math.floor(p.stock_punto / factor);
                 const agotado = p.stock_punto <= 0;
                 return (
-                  <div key={p.id} className="item" style={{ cursor: 'default', opacity: agotado ? 0.5 : 1 }}>
-                    <div className="grow">
+                  <div key={p.id} className="item" style={{ cursor: 'default', opacity: agotado ? 0.5 : 1, flexWrap: 'wrap' }}>
+                    <div className="grow" style={p.presentaciones?.length ? { flexBasis: '100%' } : undefined}>
                       <div className="bold">{p.nombre}</div>
                       <div className="mut">
-                        {it?.cantidad > 0 ? <>Precio <input style={{ width: 80, padding: 3 }} inputMode="decimal" value={it.precio} onChange={(e) => setPrecio(p, e.target.value)} /></> : money(p.precio)}
-                        {' · '}disp. {qty(p.stock_punto)}
+                        {it?.cantidad > 0 ? <>Precio <input style={{ width: 90, padding: 3 }} inputMode="decimal" value={it.precio} onChange={(e) => setPrecio(p, e.target.value)} />{it.precio < listaDe(p, pres) && <span className="warn"> bajo la lista ({money(listaDe(p, pres))})</span>}</> : money(listaDe(p, pres))}
+                        {' · '}disp. {qty(p.stock_punto)}{p.presentaciones?.length > 0 && desglose(p.stock_punto, p.presentaciones, p.unidad) ? ` (${desglose(p.stock_punto, p.presentaciones, p.unidad)})` : ''}
                       </div>
                     </div>
-                    {agotado ? <span className="tag mal">Agotado</span> : <Stepper value={it?.cantidad || 0} max={p.stock_punto} onChange={(c) => setCant(p, c)} />}
+                    {agotado ? <span className="tag mal">Agotado</span> : (
+                      <div className="row" style={{ gap: 6, ...(p.presentaciones?.length ? { width: '100%', justifyContent: 'space-between' } : {}) }}>
+                        <SelectorPresentacion producto={p} value={pres} onChange={(v) => setPres(p, v)} />
+                        <Stepper value={it?.cantidad || 0} max={max} onChange={(c) => setCant(p, c)} />
+                      </div>
+                    )}
                   </div>
                 );
               })}

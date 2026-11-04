@@ -29,9 +29,16 @@ router.get('/resumen', wrap((req, res) => {
     WHERE r.anulada=0 AND ${rango('r')} AND ${filtro('r')} GROUP BY r.ruta_id, r.bodega_id ORDER BY ventas DESC`).all(p);
   const porBodega = db.prepare(`SELECT b.id, b.nombre AS bodega, COUNT(*) AS remisiones, SUM(r.total) AS ventas FROM remisiones r JOIN bodegas b ON b.id=r.bodega_id
     WHERE r.anulada=0 AND ${rango('r')} AND ${filtro('r')} GROUP BY b.id ORDER BY ventas DESC`).all(p);
-  const topProductos = db.prepare(`SELECT i.descripcion AS nombre, SUM(i.cantidad) AS cantidad, SUM(i.cantidad*i.precio) AS ventas, SUM(i.cantidad*(i.precio-i.costo)) AS utilidad
-    FROM remision_items i JOIN remisiones r ON r.id=i.remision_id WHERE r.anulada=0 AND ${rango('r')} AND ${filtro('r')}
+  // cantidades en la unidad base del producto, sin importar si se vendió por unidad, caja o estiba
+  const topProductos = db.prepare(`SELECT p.nombre, p.unidad, SUM(i.cantidad*i.factor) AS cantidad, SUM(i.cantidad*i.precio) AS ventas, SUM(i.cantidad*(i.precio-i.costo)) AS utilidad
+    FROM remision_items i JOIN remisiones r ON r.id=i.remision_id JOIN productos p ON p.id=i.producto_id WHERE r.anulada=0 AND ${rango('r')} AND ${filtro('r')}
     GROUP BY i.producto_id ORDER BY ventas DESC LIMIT 10`).all(p);
+  // Control de precios: líneas vendidas por debajo del precio de lista (el vendedor puede negociar, pero queda a la vista)
+  const bajos_ = db.prepare(`SELECT us.nombre AS vendedor, COUNT(*) AS lineas, SUM((i.precio_lista-i.precio)*i.cantidad) AS valor
+    FROM remision_items i JOIN remisiones r ON r.id=i.remision_id JOIN usuarios us ON us.id=r.usuario_id
+    WHERE r.anulada=0 AND i.precio_lista IS NOT NULL AND i.precio < i.precio_lista - 0.005 AND ${rango('r')} AND ${filtro('r')}
+    GROUP BY r.usuario_id ORDER BY valor DESC`).all(p);
+  const preciosBajos = { lineas: bajos_.reduce((a, x) => a + x.lineas, 0), valor: r2(bajos_.reduce((a, x) => a + x.valor, 0)), por_vendedor: bajos_.map((x) => ({ ...x, valor: r2(x.valor) })) };
   const porDia = db.prepare(`SELECT substr(r.fecha,1,10) AS dia, SUM(total) AS ventas FROM remisiones r WHERE r.anulada=0 AND ${rango('r')} AND ${filtro('r')} GROUP BY dia ORDER BY dia`).all(p);
   const cartera = db.prepare(`SELECT COALESCE(SUM(total-pagado),0) AS v FROM remisiones r WHERE r.anulada=0 AND ${filtro('r')}`).get().v;
   const porPagar = db.prepare(`SELECT COALESCE(SUM(total-pagado),0) AS v FROM compras c WHERE c.anulada=0 AND ${filtro('c')}`).get().v;
@@ -63,7 +70,7 @@ router.get('/resumen', wrap((req, res) => {
   const utilBruta = r2(ventas.ventas - costo);
   res.json({ ...p, bodega_id: bodegaId, ...ventas, costo: r2(costo), descuentos: r2(descuentos), utilidad_bruta: utilBruta, gastos: r2(gastos), utilidad_neta: r2(utilBruta - gastos),
     compras: r2(compras), cobrado_efectivo: r2(cobros.efectivo), cobrado_transferencia: r2(cobros.transferencias), cartera: r2(cartera), por_pagar: r2(porPagar), valor_inventario: r2(valorInv), por_ruta: porRuta, por_bodega: porBodega,
-    top_productos: topProductos, por_dia: porDia, stock_bajo: bajos });
+    top_productos: topProductos, precios_bajos: preciosBajos, por_dia: porDia, stock_bajo: bajos });
 }));
 
 export default router;

@@ -36,7 +36,7 @@ const { db } = await import('../db.js');
 const { iniciar } = await import('./ayuda.js');
 
 test('la base v1 se migra a v2 sin perder datos', () => {
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 3);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 4);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
   const bodegas = db.prepare('SELECT * FROM bodegas').all();
   assert.equal(bodegas.length, 1);
@@ -57,6 +57,9 @@ test('la base v1 se migra a v2 sin perder datos', () => {
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM remision_items').get().n, 2);
   // las tablas nuevas existen
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM traslados').get().n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM presentaciones').get().n, 0);
+  // las líneas vendidas de antes quedan como unidad base, sin precio de lista (no entran al reporte de precios bajos)
+  assert.deepEqual(db.prepare('SELECT DISTINCT factor, presentacion, precio_lista FROM remision_items').all().map((i) => [i.factor, i.presentacion, i.precio_lista]), [[1, null, null]]);
 });
 
 test('después de migrar, la app funciona con los usuarios y datos de antes', async () => {
@@ -75,5 +78,5 @@ test('después de migrar, la app funciona con los usuarios y datos de antes', as
   assert.equal((await call('GET', '/inventario?ub=R1', null, freddy)).body.productos.find((p) => p.id === 1).cantidad, 35);
   assert.equal((await call('GET', '/cierre?punto=B1&fecha=2026-09-30', null, admin)).body.cierre.entregado, 3000);
   // y abrir de nuevo la base ya migrada no la vuelve a tocar
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 3);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 4);
 });

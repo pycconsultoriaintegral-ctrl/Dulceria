@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { db, tx, ahora, HttpError, moverStock, getStock } from '../db.js';
 import { wrap, n, num, entero } from '../util.js';
+import { presentacionDe, aBase, presentacionesDe } from '../presentaciones.js';
 import { B, R, parseUb, getRuta, getBodega, nombreUb, exigir, esAdmin, esAdminOBodeguero, puedeBodega, puedeRuta, puedeUb } from '../scope.js';
 
 const router = Router();
@@ -26,7 +27,8 @@ router.get('/inventario', wrap((req, res) => {
       if (tipo === 'B' && idsB.has(id)) { f.por_bodega[id] = s.cantidad; f.total += s.cantidad; }
       else if (tipo === 'R' && idsB.has(rutaBodega.get(id))) { f.en_rutas += s.cantidad; f.total += s.cantidad; }
     }
-    return res.json({ ub: 'resumen', bodegas, productos: [...filas.values()].map((f) => { if (u.rol !== 'admin') delete f.costo; return f; }) });
+    const pres = presentacionesDe([...filas.keys()]);
+    return res.json({ ub: 'resumen', bodegas, productos: [...filas.values()].map((f) => { if (u.rol !== 'admin') delete f.costo; f.presentaciones = pres.get(f.id) ?? []; return f; }) });
   }
   const p = parseUb(ub);
   exigir(puedeUb(u, ub), 'No tienes permiso sobre esa ubicación');
@@ -35,6 +37,8 @@ router.get('/inventario', wrap((req, res) => {
   const productos = db.prepare(`SELECT p.id,p.codigo,p.nombre,p.unidad,p.costo,p.stock_minimo, COALESCE(s.cantidad,0) AS cantidad
     FROM productos p LEFT JOIN stock s ON s.producto_id=p.id AND s.ubicacion=? WHERE p.activo=1 ORDER BY p.nombre`).all(ub);
   if (!verCosto) for (const x of productos) delete x.costo;
+  const presU = presentacionesDe(productos.map((x) => x.id));
+  for (const x of productos) x.presentaciones = presU.get(x.id) ?? [];
   res.json({ ub, tipo: p.tipo, nombre: nombreUb(ub), bodega_id: p.tipo === 'B' ? p.id : info.bodega_id, productos });
 }));
 
@@ -53,7 +57,7 @@ router.post('/inventario/cargue', wrap((req, res) => {
     const desde = sentido === 'cargue' ? B(ruta.bodega_id) : R(ruta.id);
     const hacia = sentido === 'cargue' ? R(ruta.id) : B(ruta.bodega_id);
     for (const i of items) {
-      const q = num(i.cantidad, 'Cantidad');
+      const q = aBase(num(i.cantidad, 'Cantidad'), presentacionDe(Number(i.producto_id), i.presentacion_id));
       if (q <= 0) continue;
       moverStock({ productoId: i.producto_id, ubicacion: desde, delta: -q, tipo: sentido, referencia: ref, usuarioId: req.user.id });
       moverStock({ productoId: i.producto_id, ubicacion: hacia, delta: q, tipo: sentido, referencia: ref, usuarioId: req.user.id });
@@ -68,7 +72,8 @@ router.post('/inventario/ajuste', wrap((req, res) => {
   exigir(esAdminOBodeguero(req.user));
   parseUb(ub);
   exigir(puedeUb(req.user, ub), 'No tienes permiso sobre esa ubicación');
-  const real = num(cantidad_real, 'Cantidad real');
+  // la cantidad contada puede venir en una presentación (ej. 130 estibas); el inventario queda en unidades base
+  const real = aBase(num(cantidad_real, 'Cantidad real'), presentacionDe(Number(producto_id), req.body.presentacion_id));
   if (real < 0) throw new HttpError(400, 'La cantidad no puede ser negativa');
   tx(() => {
     const delta = real - getStock(producto_id, ub);

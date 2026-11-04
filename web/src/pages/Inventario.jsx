@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { get, post, money, qty, useCarga, useUbicaciones, puedeGestionar, ir, conPrefijo } from '../lib.js';
-import { Header, Cargando, Vacio, Modal, Campo, Stepper, toast, useAccion } from '../ui.jsx';
+import { get, post, money, qty, useCarga, useUbicaciones, puedeGestionar, ir, conPrefijo, desglose, factorDe } from '../lib.js';
+import { Header, Cargando, Vacio, Modal, Campo, Stepper, toast, useAccion, SelectorPresentacion } from '../ui.jsx';
 
 export function Inventario({ user }) {
   const gestiona = puedeGestionar(user);
@@ -61,6 +61,7 @@ export function Inventario({ user }) {
                       <div className="mut">{d.bodegas.map((b) => `${b.nombre} ${qty(p.por_bodega[b.id] || 0)}`).join(' · ')} · Rutas {qty(p.en_rutas)}</div>
                     </div>
                     <div className="right"><b className={p.total <= 0 ? 'mal' : ''}>{qty(p.total)}</b> <span className="mut">{p.unidad}</span>
+                      {desglose(p.total, p.presentaciones, p.unidad) && <div className="mut">{desglose(p.total, p.presentaciones, p.unidad)}</div>}
                       {p.costo !== undefined && <div className="mut">{money(p.total * p.costo)}</div>}</div>
                   </div>
                 ))}
@@ -73,7 +74,7 @@ export function Inventario({ user }) {
                   return (
                     <div key={p.id} className="item" onClick={() => gestiona && setAjuste({ p, ub: d.ub, actual: c })}>
                       <div className="grow"><div className="bold">{p.nombre}</div>{p.costo !== undefined && <div className="mut">Costo {money(p.costo)} · valor {money(c * p.costo)}</div>}</div>
-                      <div className="right"><b className={c <= 0 ? 'mal' : bajo ? 'warn' : ''}>{qty(c)}</b> <span className="mut">{p.unidad}</span>{bajo && <div className="tag warn">Reponer</div>}</div>
+                      <div className="right"><b className={c <= 0 ? 'mal' : bajo ? 'warn' : ''}>{qty(c)}</b> <span className="mut">{p.unidad}</span>{desglose(c, p.presentaciones, p.unidad) && <div className="mut">{desglose(c, p.presentaciones, p.unidad)}</div>}{bajo && <div className="tag warn">Reponer</div>}</div>
                       {gestiona && <button className="btn sm gris" onClick={(e) => { e.stopPropagation(); setKardex({ p, ub: d.ub }); }}>Kardex</button>}
                     </div>
                   );
@@ -99,15 +100,19 @@ function MovimientoRuta({ ruta, sentido, onClose, onHecho }) {
   const [filtro, setFiltro] = useState('');
   const [ocupado, run] = useAccion();
   const productos = (origen.data?.productos || []).filter((p) => p.cantidad > 0 && p.nombre.toLowerCase().includes(filtro.toLowerCase()));
-  const items = Object.entries(q).filter(([, c]) => c > 0).map(([producto_id, cantidad]) => ({ producto_id: +producto_id, cantidad }));
+  const [pr, setPr] = useState({}); // producto -> presentación elegida
+  const items = Object.entries(q).filter(([, c]) => c > 0).map(([producto_id, cantidad]) => ({ producto_id: +producto_id, cantidad, presentacion_id: pr[producto_id] || undefined }));
   return (
     <Modal titulo={`${cargue ? 'Cargar' : 'Devolución de'} ${ruta.nombre}`} onClose={onClose}>
       <p className="mut">{cargue ? 'Sale de la bodega de la ruta y queda en la ruta.' : 'Sale de la ruta y regresa a su bodega (lo que sobró al final del día).'}</p>
       <input className="q" placeholder="Buscar producto…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
       {origen.loading ? <Cargando s={origen} /> : productos.length === 0 ? <Vacio>No hay productos disponibles</Vacio> : productos.map((p) => (
         <div key={p.id} className="item row between" style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }}>
-          <div><div className="bold">{p.nombre}</div><div className="mut">disp. {qty(p.cantidad)}</div></div>
-          <Stepper value={q[p.id] || 0} max={p.cantidad} onChange={(c) => setQ({ ...q, [p.id]: c })} />
+          <div><div className="bold">{p.nombre}</div><div className="mut">disp. {qty(p.cantidad)}{desglose(p.cantidad, p.presentaciones, p.unidad) ? ` (${desglose(p.cantidad, p.presentaciones, p.unidad)})` : ''}</div></div>
+          <div className="row" style={{ gap: 6 }}>
+            <SelectorPresentacion producto={p} value={pr[p.id]} onChange={(v) => { setPr({ ...pr, [p.id]: v }); setQ({ ...q, [p.id]: 0 }); }} />
+            <Stepper value={q[p.id] || 0} max={Math.floor(p.cantidad / factorDe(p, pr[p.id]))} onChange={(c) => setQ({ ...q, [p.id]: c })} />
+          </div>
         </div>
       ))}
       <button className="btn block" style={{ marginTop: 12 }} disabled={ocupado || !items.length}
@@ -117,15 +122,20 @@ function MovimientoRuta({ ruta, sentido, onClose, onHecho }) {
 }
 
 function Ajuste({ a, onClose, onHecho }) {
+  const [pres, setPres] = useState(null);
+  const factor = factorDe(a.p, pres);
   const [real, setReal] = useState(String(a.actual));
   const [nota, setNota] = useState('');
   const [ocupado, run] = useAccion();
   return (
     <Modal titulo={`Ajustar ${a.p.nombre}`} onClose={onClose}>
-      <p className="mut">Sistema: {qty(a.actual)}. Escribe lo que contaste físicamente.</p>
-      <Campo label="Cantidad real" inputMode="decimal" value={real} onChange={(e) => setReal(e.target.value)} />
+      <p className="mut">Sistema: {qty(a.actual)} {a.p.unidad}{desglose(a.actual, a.p.presentaciones, a.p.unidad) ? ` (${desglose(a.actual, a.p.presentaciones, a.p.unidad)})` : ''}. Escribe lo que contaste físicamente.</p>
+      {a.p.presentaciones?.length > 0 && (
+        <div className="row" style={{ marginBottom: 8 }}><span className="mut">Contado en</span><SelectorPresentacion producto={a.p} value={pres} onChange={(v) => { setPres(v); setReal(String(Math.round((a.actual / factorDe(a.p, v)) * 1e6) / 1e6)); }} /></div>
+      )}
+      <Campo label={`Cantidad real${pres ? ` (en ${a.p.presentaciones.find((x) => x.id === pres)?.nombre})` : ''}`} inputMode="decimal" value={real} onChange={(e) => setReal(e.target.value)} />
       <Campo label="Motivo (merma, vencido, conteo…)" value={nota} onChange={(e) => setNota(e.target.value)} />
-      <button className="btn block" disabled={ocupado} onClick={() => run(async () => { await post('/inventario/ajuste', { producto_id: a.p.id, ub: a.ub, cantidad_real: Number(real), nota }); onHecho(); }, 'Ajuste guardado')}>Guardar ajuste</button>
+      <button className="btn block" disabled={ocupado} onClick={() => run(async () => { await post('/inventario/ajuste', { producto_id: a.p.id, ub: a.ub, cantidad_real: Number(real), presentacion_id: pres || undefined, nota }); onHecho(); }, 'Ajuste guardado')}>Guardar ajuste</button>
     </Modal>
   );
 }

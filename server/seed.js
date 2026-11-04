@@ -29,6 +29,8 @@ export function sembrarDemo() {
       moverStock({ productoId: id, ubicacion: `B${bodega1}`, delta: -60, tipo: 'cargue', referencia: 'CG-DEMO' });
       moverStock({ productoId: id, ubicacion: `R${ruta}`, delta: 60, tipo: 'cargue', referencia: 'CG-DEMO' });
       moverStock({ productoId: id, ubicacion: `B${bodega2}`, delta: 80, tipo: 'ajuste', costo, referencia: 'INICIAL' });
+      if (nombre === 'Chocolatina') db.prepare('INSERT INTO presentaciones (producto_id,nombre,factor) VALUES (?,?,?)').run(id, 'caja', 24);
+      if (nombre === 'Gaseosa 400ml') db.prepare('INSERT INTO presentaciones (producto_id,nombre,factor,precio) VALUES (?,?,?,?)').run(id, 'paca', 12, 22000);
     }
     db.prepare("INSERT INTO clientes (nombre,negocio,telefono,direccion,ruta_id) VALUES ('Doña Marta','Tienda La Esquina','3001112233','Cra 5 # 10-20',?)").run(ruta);
     db.prepare("INSERT INTO clientes (nombre,negocio,telefono,direccion,ruta_id) VALUES ('Pedro Gómez','Miscelánea El Sol','3104445566','Cl 8 # 3-15',?)").run(ruta);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { get, post, qty, useCarga, useUbicaciones, ir, esAdmin } from '../lib.js';
-import { Header, Cargando, Vacio, Modal, Stepper, SelectorBodega, toast, useAccion } from '../ui.jsx';
+import { get, post, qty, useCarga, useUbicaciones, ir, esAdmin, desglose, factorDe } from '../lib.js';
+import { Header, Cargando, Vacio, Modal, Stepper, SelectorBodega, SelectorPresentacion, toast, useAccion } from '../ui.jsx';
 
 const ESTADO = { enviado: ['En camino', 'warn'], recibido: ['Recibido', 'ok'], anulado: ['Anulado', 'mal'] };
 
@@ -44,7 +44,8 @@ function NuevoTraslado({ bodegas, origenes, inicial, onClose, onHecho }) {
   const [filtro, setFiltro] = useState('');
   const inv = useCarga(() => (origen ? get(`/inventario?ub=B${origen}`) : { productos: [] }), [origen]);
   const [ocupado, run] = useAccion();
-  const items = Object.entries(q).filter(([, c]) => c > 0).map(([producto_id, cantidad]) => ({ producto_id: +producto_id, cantidad }));
+  const [pr, setPr] = useState({});
+  const items = Object.entries(q).filter(([, c]) => c > 0).map(([producto_id, cantidad]) => ({ producto_id: +producto_id, cantidad, presentacion_id: pr[producto_id] || undefined }));
   const productos = (inv.data?.productos || []).filter((p) => p.cantidad > 0 && p.nombre.toLowerCase().includes(filtro.toLowerCase()));
   return (
     <Modal titulo="Enviar a otra bodega" onClose={onClose}>
@@ -53,8 +54,11 @@ function NuevoTraslado({ bodegas, origenes, inicial, onClose, onHecho }) {
       <input className="q" placeholder="Buscar producto…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
       {inv.loading ? <Cargando s={inv} /> : productos.map((p) => (
         <div key={p.id} className="item row between" style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }}>
-          <div><div className="bold">{p.nombre}</div><div className="mut">disp. {qty(p.cantidad)}</div></div>
-          <Stepper value={q[p.id] || 0} max={p.cantidad} onChange={(c) => setQ({ ...q, [p.id]: c })} />
+          <div><div className="bold">{p.nombre}</div><div className="mut">disp. {qty(p.cantidad)}{desglose(p.cantidad, p.presentaciones, p.unidad) ? ` (${desglose(p.cantidad, p.presentaciones, p.unidad)})` : ''}</div></div>
+          <div className="row" style={{ gap: 6 }}>
+            <SelectorPresentacion producto={p} value={pr[p.id]} onChange={(v) => { setPr({ ...pr, [p.id]: v }); setQ({ ...q, [p.id]: 0 }); }} />
+            <Stepper value={q[p.id] || 0} max={Math.floor(p.cantidad / factorDe(p, pr[p.id]))} onChange={(c) => setQ({ ...q, [p.id]: c })} />
+          </div>
         </div>
       ))}
       <label className="f" style={{ marginTop: 10 }}>Nota (opcional)<input value={nota} onChange={(e) => setNota(e.target.value)} /></label>
@@ -80,7 +84,7 @@ function Detalle({ t, user, onClose, onHecho }) {
           const falta = t.estado === 'recibido' && i.cantidad_recibida < i.cantidad;
           return (
             <div key={i.id} className="item row between" style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }}>
-              <div><div className="bold">{i.nombre}</div><div className="mut">Enviado {qty(i.cantidad)}{t.estado === 'recibido' && <> · recibido {qty(i.cantidad_recibida)}</>}</div>
+              <div><div className="bold">{i.nombre}</div><div className="mut">Enviado {qty(i.cantidad)} {i.unidad}{desglose(i.cantidad, i.presentaciones, i.unidad) ? ` (${desglose(i.cantidad, i.presentaciones, i.unidad)})` : ''}{t.estado === 'recibido' && <> · recibido {qty(i.cantidad_recibida)}</>}</div>
                 {falta && <div className="tag mal">Faltante {qty(i.cantidad - i.cantidad_recibida)}</div>}</div>
               {puedeRecibir && <Stepper value={rec[i.producto_id]} max={i.cantidad} onChange={(c) => setRec({ ...rec, [i.producto_id]: c })} />}
             </div>

@@ -4,6 +4,7 @@ import { db, tx, HttpError, getStock, moverStock } from '../db.js';
 import { soloAdmin } from '../auth.js';
 import { wrap } from '../util.js';
 import { leerObjetos, leerNumero, normalizar } from '../csv.js';
+import { aBase } from '../presentaciones.js';
 import { exigir, esAdminOBodeguero, puedeUb, puedeRuta, parseUb } from '../scope.js';
 
 const router = Router();
@@ -153,6 +154,7 @@ const ALIAS_CONTEO = {
   producto: ['producto', 'nombre', 'descripcion', 'articulo', 'item'],
   codigo: ['codigo', 'cod', 'sku', 'referencia', 'ref'],
   cantidad: ['cantidad', 'conteo', 'existencia', 'existencias', 'stock', 'cant', 'inventario'],
+  presentacion: ['presentacion', 'en', 'medida'], // opcional: "estiba", "caja"… (la cantidad está en esa presentación)
 };
 router.post('/inventario', wrap((req, res) => {
   exigir(esAdminOBodeguero(req.user));
@@ -161,7 +163,7 @@ router.post('/inventario', wrap((req, res) => {
   exigir(puedeUb(req.user, ub), 'No tienes permiso sobre esa ubicación');
   const t = tabla(req, ALIAS_CONTEO, ['cantidad']);
   if (t.indice.producto === undefined && t.indice.codigo === undefined) throw new HttpError(400, 'Falta la columna "producto" (o "codigo") en la primera fila');
-  const productos = db.prepare('SELECT id, codigo, nombre FROM productos WHERE activo=1').all();
+  const productos = db.prepare('SELECT id, codigo, nombre, unidad FROM productos WHERE activo=1').all();
   const porCodigo = new Map(productos.filter((p) => p.codigo).map((p) => [normalizar(p.codigo), p]));
   const porNombre = new Map(productos.map((p) => [normalizar(p.nombre), p]));
   const vistos = new Map();
@@ -172,8 +174,14 @@ router.post('/inventario', wrap((req, res) => {
     f.producto = p.nombre;
     if (vistos.has(p.id)) { f.error = `Repetido en el archivo (ya está en la línea ${vistos.get(p.id)})`; return f; }
     vistos.set(p.id, r._linea);
-    const real = leerNumero(r.cantidad);
+    let real = leerNumero(r.cantidad);
     if (real === null || real < 0) { f.error = `Cantidad inválida: "${r.cantidad}"`; return f; }
+    if (r.presentacion && normalizar(r.presentacion) !== normalizar(p.unidad ?? '')) {
+      const pr = db.prepare('SELECT * FROM presentaciones WHERE producto_id=? AND activo=1').all(p.id).find((x) => normalizar(x.nombre) === normalizar(r.presentacion));
+      if (!pr) { f.error = `"${p.nombre}" no tiene la presentación "${r.presentacion}"`; return f; }
+      real = aBase(real, pr);
+      f.presentacion = pr.nombre;
+    }
     f.producto_id = p.id;
     f.actual = getStock(p.id, ub);
     f.conteo = real;
@@ -187,6 +195,57 @@ router.post('/inventario', wrap((req, res) => {
     });
   }
   res.json({ aplicado: !!req.body.aplicar, resumen: resumen(filas), filas });
+}));
+
+// ---------- Presentaciones de productos existentes ----------
+const ALIAS_PRESENTACION = {
+  producto: ['producto', 'nombre', 'descripcion', 'articulo'],
+  codigo: ['codigo', 'cod', 'sku', 'referencia', 'ref'],
+  presentacion: ['presentacion', 'nombre presentacion', 'empaque'],
+  factor: ['equivalencia', 'factor', 'unidades', 'contiene', 'trae', 'cantidad'],
+  precio: ['precio', 'precio presentacion', 'precio venta', 'pvp'],
+};
+router.post('/presentaciones', soloAdmin, wrap((req, res) => {
+  const t = tabla(req, ALIAS_PRESENTACION, ['presentacion', 'factor']);
+  if (t.indice.producto === undefined && t.indice.codigo === undefined) throw new HttpError(400, 'Falta la columna "producto" (o "codigo") en la primera fila');
+  const productos = db.prepare('SELECT id, codigo, nombre FROM productos').all();
+  const porCodigo = new Map(productos.filter((p) => p.codigo).map((p) => [normalizar(p.codigo), p]));
+  const porNombre = new Map(productos.map((p) => [normalizar(p.nombre), p]));
+  const vistos = new Map();
+  const filas = t.filas.map((r) => {
+    const f = { linea: r._linea, producto: r.producto || r.codigo, presentacion: r.presentacion, accion: 'crear', cambios: [] };
+    const p = (r.codigo && porCodigo.get(normalizar(r.codigo))) || (r.producto && porNombre.get(normalizar(r.producto)));
+    if (!p) { f.error = `No existe el producto "${r.producto || r.codigo}"`; return f; }
+    f.producto = p.nombre;
+    if (!r.presentacion) { f.error = 'Falta el nombre de la presentación'; return f; }
+    const factor = leerNumero(r.factor);
+    if (factor === null || !(factor > 0) || factor === 1) { f.error = `Equivalencia inválida: "${r.factor}" (cuántas unidades trae; no puede ser 1)`; return f; }
+    const precio = r.precio ? leerNumero(r.precio) : null;
+    if (r.precio && (precio === null || precio < 0)) { f.error = `Precio inválido: "${r.precio}"`; return f; }
+    const clave = `${p.id}:${normalizar(r.presentacion)}`;
+    if (vistos.has(clave)) { f.error = `Repetido en el archivo (ya está en la línea ${vistos.get(clave)})`; return f; }
+    vistos.set(clave, r._linea);
+    f.datos = { producto_id: p.id, nombre: r.presentacion, factor, precio };
+    const ya = db.prepare('SELECT * FROM presentaciones WHERE producto_id=? AND lower(nombre)=lower(?)').get(p.id, r.presentacion);
+    if (ya) {
+      f.accion = ya.activo && ya.factor === factor && (precio === null || ya.precio === precio) ? 'sin_cambios' : 'actualizar';
+      if (ya.factor !== factor) f.cambios.push(`equivalencia: ${ya.factor} → ${factor}`);
+      if (precio !== null && ya.precio !== precio) f.cambios.push(`precio: ${ya.precio ?? '—'} → ${precio}`);
+      f.id = ya.id;
+    }
+    return f;
+  });
+  if (req.body.aplicar) {
+    tx(() => {
+      for (const f of filas) {
+        if (f.error) continue;
+        const d = f.datos;
+        if (f.accion === 'crear') db.prepare('INSERT INTO presentaciones (producto_id,nombre,factor,precio) VALUES (?,?,?,?)').run(d.producto_id, d.nombre, d.factor, d.precio);
+        else if (f.accion === 'actualizar') db.prepare('UPDATE presentaciones SET factor=?, precio=COALESCE(?,precio), activo=1 WHERE id=?').run(d.factor, d.precio, f.id);
+      }
+    });
+  }
+  res.json({ aplicado: !!req.body.aplicar, resumen: resumen(filas), filas: filas.map(({ datos, ...x }) => x) });
 }));
 
 export default router;
