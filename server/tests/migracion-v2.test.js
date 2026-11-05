@@ -20,7 +20,7 @@ test('una base v2 recibe la columna de transferencias y conserva sus cierres', (
   v2.exec('ALTER TABLE cierres DROP COLUMN transferencias; PRAGMA user_version = 2');
   v2.close();
   const salida = JSON.parse(abrir());
-  assert.equal(salida.v, 5);
+  assert.equal(salida.v, 6);
   assert.ok(salida.cols.includes('transferencias'));
   const despues = new DatabaseSync(archivo);
   const c = despues.prepare('SELECT esperado, transferencias FROM cierres').get();
@@ -28,5 +28,5 @@ test('una base v2 recibe la columna de transferencias y conserva sus cierres', (
   assert.equal(c.esperado, 5000); // el dato de antes sigue ahí
   assert.equal(c.transferencias, 0);
   // abrirla otra vez no cambia nada
-  assert.equal(JSON.parse(abrir()).v, 5);
+  assert.equal(JSON.parse(abrir()).v, 6);
 });

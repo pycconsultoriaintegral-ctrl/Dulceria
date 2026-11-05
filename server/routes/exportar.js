@@ -26,7 +26,7 @@ router.get('/ventas', wrap((req, res) => {
     JOIN bodegas b ON b.id=r.bodega_id LEFT JOIN rutas ru ON ru.id=r.ruta_id
     WHERE substr(r.fecha,1,10) BETWEEN @desde AND @hasta AND ${alcance} ORDER BY r.id, i.id`).all(rango(q));
   csv(res, 'ventas', ['Fecha', 'Remisión', 'Ruta', 'Bodega', 'Vendedor', 'Cliente', 'Producto', 'Presentación', 'Cantidad', 'Precio', 'Precio de lista', 'Total', ...(costos ? ['Costo'] : []), 'Pago', 'Estado'],
-    filas.map((f) => [f.fecha, f.consecutivo, f.ruta, f.bodega, f.vendedor, f.cliente, f.descripcion, f.presentacion, f.cantidad, f.precio, f.precio_lista, r2(f.total_linea), ...(costos ? [r2(f.costo_linea)] : []), f.tipo_pago, f.anulada ? 'Anulada' : 'Válida']));
+    filas.map((f) => [f.fecha, f.consecutivo, f.ruta, f.bodega, f.vendedor, f.cliente, f.descripcion, f.presentacion, f.cantidad, f.precio, f.precio_lista, r2(f.total_linea), ...(costos ? [r2(f.costo_linea)] : []), f.tipo_pago, f.anulada === 2 ? 'Pendiente de pago' : f.anulada ? 'Anulada' : 'Válida']));
 }));
 
 router.get('/cartera', wrap((req, res) => {

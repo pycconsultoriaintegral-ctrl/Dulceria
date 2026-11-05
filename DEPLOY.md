@@ -24,7 +24,7 @@ La primera vez tarda ~1 minuto en emitir el certificado. Entra a `https://APP_DO
 Abre la dirección en Chrome (Android) o Safari (iPhone) → menú → **Agregar a pantalla de inicio**. Quedará como una app.
 
 ## 5. Copias de seguridad
-- El servicio `respaldo` guarda cada 24 h una copia en `./respaldos/` y conserva las últimas 14.
+- El servicio `respaldo` guarda cada 24 h una copia en `./respaldos/` y conserva las últimas 14. Las fotos de los soportes de pago viven dentro de la base de datos, así que **entran en la copia** (cada foto pesa unos 150-300 KB).
 - Descárgalas fuera del servidor con regularidad, por ejemplo desde tu computador:
   `scp -r usuario@IP:~/Dulceria/respaldos .`
 - **Restaurar**: `docker compose stop app`, copia el respaldo sobre el volumen (`docker compose cp respaldos/dulceria-XXXX.db app:/data/dulceria.db`) y `docker compose start app`.

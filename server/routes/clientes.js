@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db, HttpError } from '../db.js';
 import { wrap, n, req_, entero } from '../util.js';
 import { getRuta, puedeRuta, exigir, sqlAlcance } from '../scope.js';
+import { auditar } from '../auditoria.js';
 
 const router = Router();
 // El saldo que ve cada usuario es el de su alcance (un cliente sin ruta puede deber en varias rutas o bodegas)
@@ -40,20 +41,28 @@ function rutaDelCliente(u, valor) {
   return r.id;
 }
 
+// "Paga antes": solo el encargado y el administrador deciden qué clientes deben pagar antes de recibir la mercancía.
+// Un vendedor no puede marcar ni desmarcar (quitaría el control), así que su valor se ignora.
+const pagaAntesDe = (u, valor) => (u.rol === 'vendedor' || valor === undefined || valor === null ? null : valor ? 1 : 0);
+
 router.post('/', wrap((req, res) => {
   const b = req.body;
-  const id = db.prepare('INSERT INTO clientes (nombre,negocio,telefono,direccion,documento,ruta_id) VALUES (?,?,?,?,?,?)')
-    .run(req_(b.nombre, 'El nombre es obligatorio'), n(b.negocio), n(b.telefono), n(b.direccion), n(b.documento), rutaDelCliente(req.user, b.ruta_id)).lastInsertRowid;
-  res.json({ id: Number(id) });
+  const id = Number(db.prepare('INSERT INTO clientes (nombre,negocio,telefono,direccion,documento,ruta_id,paga_antes) VALUES (?,?,?,?,?,?,?)')
+    .run(req_(b.nombre, 'El nombre es obligatorio'), n(b.negocio), n(b.telefono), n(b.direccion), n(b.documento), rutaDelCliente(req.user, b.ruta_id), pagaAntesDe(req.user, b.paga_antes) ?? 0).lastInsertRowid);
+  if (pagaAntesDe(req.user, b.paga_antes)) auditar(req.user, 'marcar paga antes', 'cliente', id, b.nombre);
+  res.json({ id });
 }));
 
 router.put('/:id', wrap((req, res) => {
   const b = req.body;
   const id = entero(req.params.id);
-  puedeVerCliente(req.user, db.prepare('SELECT * FROM clientes WHERE id=?').get(id));
-  db.prepare('UPDATE clientes SET nombre=?,negocio=?,telefono=?,direccion=?,documento=?,ruta_id=?,activo=COALESCE(?,activo) WHERE id=?')
+  const antes = db.prepare('SELECT * FROM clientes WHERE id=?').get(id);
+  puedeVerCliente(req.user, antes);
+  const pagaAntes = pagaAntesDe(req.user, b.paga_antes);
+  db.prepare('UPDATE clientes SET nombre=?,negocio=?,telefono=?,direccion=?,documento=?,ruta_id=?,activo=COALESCE(?,activo),paga_antes=COALESCE(?,paga_antes) WHERE id=?')
     .run(req_(b.nombre, 'El nombre es obligatorio'), n(b.negocio), n(b.telefono), n(b.direccion), n(b.documento),
-      rutaDelCliente(req.user, b.ruta_id), req.user.rol === 'admin' && b.activo !== undefined ? Number(b.activo) : null, id);
+      rutaDelCliente(req.user, b.ruta_id), req.user.rol === 'admin' && b.activo !== undefined ? Number(b.activo) : null, pagaAntes, id);
+  if (pagaAntes !== null && pagaAntes !== antes.paga_antes) auditar(req.user, pagaAntes ? 'marcar paga antes' : 'quitar paga antes', 'cliente', id, antes.nombre);
   res.json({ ok: true });
 }));
 

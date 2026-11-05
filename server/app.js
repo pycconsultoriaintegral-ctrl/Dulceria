@@ -15,12 +15,18 @@ import reportes from './routes/reportes.js';
 import importar from './routes/importar.js';
 import exportar from './routes/exportar.js';
 import auditoria from './routes/auditoria.js';
+import aprobaciones from './routes/aprobaciones.js';
 
 export function crearApp() {
   const app = express();
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '2mb' }));
+  // Las rutas que reciben fotos de comprobantes admiten un cuerpo mayor, pero solo si la petición trae sesión
+  // (la sesión se valida más adelante; esto solo evita aceptar cuerpos grandes de anónimos).
+  const jsonNormal = express.json({ limit: '2mb' });
+  const jsonConFotos = express.json({ limit: '6mb' });
+  const llevaFotos = (req) => req.method === 'POST' && !!req.headers.authorization && /^\/api\/remisiones(\/\d+\/soportes)?$/.test(req.path);
+  app.use((req, res, next) => (llevaFotos(req) ? jsonConFotos : jsonNormal)(req, res, next));
 
   // Encabezados de seguridad. La política de contenido solo permite lo que sirve la propia app
   // (el estilo en línea es necesario para los estilos de React; los trabajadores blob: para el visor de PDF).
@@ -47,6 +53,7 @@ export function crearApp() {
   api.use('/traslados', traslados);
   api.use('/clientes', clientes);
   api.use(ventas);
+  api.use(aprobaciones);
   api.use('/reportes', reportes);
   api.use('/importar', importar);
   api.use('/exportar', exportar);
