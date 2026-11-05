@@ -11,7 +11,7 @@ export const numRem = (cfg, c) => `${cfg?.prefijo || 'R'}-${String(c).padStart(6
 const K = { token: 'dr_token', user: 'dr_user', cola: 'dr_cola', rech: 'dr_rechazadas' };
 const ls = {
   get: (k, d = null) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
-  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sin almacenamiento */ } },
+  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; /* sin almacenamiento */ } },
   del: (k) => { try { localStorage.removeItem(k); } catch { /* */ } },
 };
 export const getToken = () => ls.get(K.token);
@@ -70,7 +70,8 @@ export async function enviar(tipo, payload, etiqueta) {
     return { ok: true, data: await post(url, payload) };
   } catch (e) {
     if (!(e instanceof OfflineError)) throw e;
-    ls.set(K.cola, [...cola(), { tipo, payload, uuid: payload.uuid, etiqueta }]);
+    // si el celular no tiene espacio (por ejemplo, con varias fotos de comprobantes) no se puede guardar: hay que avisar, no perder la venta en silencio
+    if (!ls.set(K.cola, [...cola(), { tipo, payload, uuid: payload.uuid, etiqueta }])) throw new Error('No hay espacio en el celular para guardar la venta sin señal. Quita las fotos del soporte o espera a tener conexión.');
     avisar();
     return { ok: false, pendiente: true };
   }

@@ -9,7 +9,7 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 // Ubicaciones de inventario: 'B<id>' = bodega, 'R<id>' = inventario en la ruta.
 // Esquema v2: varias bodegas; cada ruta pertenece a una bodega.
-const VERSION_ESQUEMA = 5;
+const VERSION_ESQUEMA = 6;
 
 const DDL = {
   config: (t) => `CREATE TABLE ${t} (clave TEXT PRIMARY KEY, valor TEXT)`,
@@ -44,14 +44,22 @@ const DDL = {
     cantidad REAL NOT NULL, costo REAL NOT NULL, factor REAL NOT NULL DEFAULT 1, presentacion TEXT)`,
   clientes: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, nombre TEXT NOT NULL, negocio TEXT, telefono TEXT, direccion TEXT, documento TEXT,
-    ruta_id INTEGER REFERENCES rutas(id), activo INTEGER DEFAULT 1)`,
+    ruta_id INTEGER REFERENCES rutas(id), activo INTEGER DEFAULT 1,
+    paga_antes INTEGER NOT NULL DEFAULT 0)`, // paga_antes = 1: sus ventas exigen soporte de pago aprobado antes de despachar
   // ruta_id NULL = venta de mostrador de la bodega bodega_id
   remisiones: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, consecutivo INTEGER NOT NULL UNIQUE, fecha TEXT NOT NULL,
     cliente_id INTEGER NOT NULL REFERENCES clientes(id), ruta_id INTEGER REFERENCES rutas(id),
     bodega_id INTEGER NOT NULL REFERENCES bodegas(id), usuario_id INTEGER NOT NULL,
     tipo_pago TEXT NOT NULL CHECK (tipo_pago IN ('contado','credito')), subtotal REAL NOT NULL, descuento REAL NOT NULL DEFAULT 0,
-    total REAL NOT NULL, pagado REAL NOT NULL DEFAULT 0, nota TEXT, anulada INTEGER DEFAULT 0, motivo_anulacion TEXT)`,
+    total REAL NOT NULL, pagado REAL NOT NULL DEFAULT 0, nota TEXT, anulada INTEGER DEFAULT 0, motivo_anulacion TEXT,
+    requiere_aprobacion INTEGER NOT NULL DEFAULT 0, fecha_solicitud TEXT, aprobado_por INTEGER, fecha_aprobacion TEXT)`,
+  // anulada: 0 = válida, 1 = anulada (o pago rechazado), 2 = pendiente de aprobación del pago (no mueve inventario ni cuenta en ventas ni cartera).
+  // Todo lo que filtra "anulada=0" ignora por sí solo las pendientes y las rechazadas.
+  // Soportes de pago (foto del comprobante de transferencia) adjuntos a una remisión
+  soportes: (t) => `CREATE TABLE ${t} (
+    id INTEGER PRIMARY KEY, remision_id INTEGER NOT NULL REFERENCES remisiones(id), fecha TEXT NOT NULL, usuario_id INTEGER,
+    mime TEXT NOT NULL, bytes INTEGER NOT NULL, huella TEXT NOT NULL, datos BLOB NOT NULL, nota TEXT)`,
   remision_items: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, remision_id INTEGER NOT NULL REFERENCES remisiones(id), producto_id INTEGER NOT NULL REFERENCES productos(id),
     descripcion TEXT NOT NULL, cantidad REAL NOT NULL, precio REAL NOT NULL, costo REAL NOT NULL DEFAULT 0,
@@ -82,9 +90,10 @@ const DDL = {
     producto_id INTEGER NOT NULL REFERENCES productos(id), cantidad REAL NOT NULL, cantidad_recibida REAL)`,
 };
 const ORDEN = ['config', 'bodegas', 'rutas', 'usuarios', 'productos', 'presentaciones', 'stock', 'movimientos', 'proveedores', 'compras', 'compra_items',
-  'clientes', 'remisiones', 'remision_items', 'pagos', 'gastos', 'cierres', 'traslados', 'traslado_items', 'auditoria'];
+  'clientes', 'remisiones', 'soportes', 'remision_items', 'pagos', 'gastos', 'cierres', 'traslados', 'traslado_items', 'auditoria'];
 const INDICES = ['CREATE INDEX IF NOT EXISTS ix_mov_prod ON movimientos(producto_id, fecha)',
-  'CREATE INDEX IF NOT EXISTS ix_rem_fecha ON remisiones(fecha)', 'CREATE INDEX IF NOT EXISTS ix_pagos_fecha ON pagos(fecha)', 'CREATE INDEX IF NOT EXISTS ix_aud_fecha ON auditoria(fecha)'];
+  'CREATE INDEX IF NOT EXISTS ix_rem_fecha ON remisiones(fecha)', 'CREATE INDEX IF NOT EXISTS ix_pagos_fecha ON pagos(fecha)', 'CREATE INDEX IF NOT EXISTS ix_aud_fecha ON auditoria(fecha)',
+  'CREATE INDEX IF NOT EXISTS ix_sop_rem ON soportes(remision_id)', 'CREATE INDEX IF NOT EXISTS ix_sop_huella ON soportes(huella)'];
 
 const existe = (t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(t);
 
@@ -152,6 +161,14 @@ const MIGRACIONES = {
   },
   // v5: registro de actividad (la tabla nueva la crea crearEsquema)
   5: () => {},
+  // v6: pago anticipado con soporte (la tabla soportes la crea crearEsquema)
+  6: () => {
+    agregarColumna('clientes', 'paga_antes', 'INTEGER NOT NULL DEFAULT 0');
+    agregarColumna('remisiones', 'requiere_aprobacion', 'INTEGER NOT NULL DEFAULT 0');
+    agregarColumna('remisiones', 'fecha_solicitud', 'TEXT');
+    agregarColumna('remisiones', 'aprobado_por', 'INTEGER');
+    agregarColumna('remisiones', 'fecha_aprobacion', 'TEXT');
+  },
 };
 
 function aplicarMigraciones() {

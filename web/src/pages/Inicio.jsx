@@ -5,12 +5,20 @@ export function Inicio({ user, cfg }) {
   const admin = puedeGestionar(user); // administrador y encargado de bodega ven el resumen de su alcance
   const s = useCarga(() => (admin ? get(`/reportes/resumen?desde=${hoyStr()}&hasta=${hoyStr()}`) : get(`/cierre?fecha=${hoyStr()}`)), []);
   const d = s.data;
+  // remisiones de clientes que pagan antes y esperan aprobación (si no hay señal, simplemente no se muestra)
+  const pend = useCarga(() => get('/aprobaciones').catch(() => []), []);
+  const nPend = pend.data?.length || 0;
   return (
     <>
       <Header titulo={cfg?.negocio || 'Dulcería Ruta'} />
       <main>
         <p className="mut" style={{ marginTop: 0 }}>Hola, <b>{user.nombre}</b> · {hoyStr()}</p>
         <button className="btn block" style={{ fontSize: 18, padding: 16, marginBottom: 12 }} onClick={() => ir('/vender')}>🛒 Nueva venta</button>
+        {nPend > 0 && (
+          <div className="aviso pend" style={{ cursor: 'pointer' }} onClick={() => ir('/aprobaciones')}>
+            <b>⏳ {nPend} {nPend === 1 ? 'remisión' : 'remisiones'} {admin ? 'por aprobar' : 'pendiente(s) de pago'}</b>
+            <div>{admin ? 'Revisa los comprobantes para poder despachar.' : 'No entregues la mercancía hasta que se apruebe el pago.'} Toca para ver.</div>
+          </div>)}
         {s.loading || s.error ? <Cargando s={s} /> : admin ? (
           <>
             <div className="grid2">

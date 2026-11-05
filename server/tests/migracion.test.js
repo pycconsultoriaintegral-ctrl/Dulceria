@@ -36,7 +36,7 @@ const { db } = await import('../db.js');
 const { iniciar } = await import('./ayuda.js');
 
 test('la base v1 se migra a v2 sin perder datos', () => {
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 5);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 6);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
   const bodegas = db.prepare('SELECT * FROM bodegas').all();
   assert.equal(bodegas.length, 1);
@@ -78,5 +78,5 @@ test('después de migrar, la app funciona con los usuarios y datos de antes', as
   assert.equal((await call('GET', '/inventario?ub=R1', null, freddy)).body.productos.find((p) => p.id === 1).cantidad, 35);
   assert.equal((await call('GET', '/cierre?punto=B1&fecha=2026-09-30', null, admin)).body.cierre.entregado, 3000);
   // y abrir de nuevo la base ya migrada no la vuelve a tocar
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 5);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 6);
 });

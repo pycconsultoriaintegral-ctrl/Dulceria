@@ -3,6 +3,12 @@ import PDFDocument from 'pdfkit';
 const money = (v) => '$' + Math.round(v).toLocaleString('es-CO');
 const qty = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
 
+// Texto del medio de pago: las remisiones de clientes que pagan antes lo muestran junto con su estado de aprobación
+const textoPago = (r) => {
+  if (r.requiere_aprobacion) return r.pendiente ? 'Anticipado (transferencia) · pendiente de aprobación' : 'Anticipado (transferencia) · aprobado';
+  return r.tipo_pago === 'contado' ? 'Contado' : 'Crédito';
+};
+
 export function remisionPdf(r, cfg) {
   const doc = new PDFDocument({ size: 'LETTER', margin: 40 });
   const L = 40, W = 532;
@@ -14,7 +20,15 @@ export function remisionPdf(r, cfg) {
   doc.fillColor('#000').font('Helvetica-Bold').fontSize(15).text('REMISIÓN', L, 40, { width: W, align: 'right' });
   doc.fontSize(13).text(`No. ${cfg.prefijo || 'R'}-${String(r.consecutivo).padStart(6, '0')}`, L, 60, { width: W, align: 'right' });
   doc.font('Helvetica').fontSize(9).text(`Fecha: ${r.fecha.slice(0, 16)}`, L, 80, { width: W, align: 'right' });
-  if (r.anulada) doc.font('Helvetica-Bold').fillColor('#c00').fontSize(14).text('ANULADA', L, 96, { width: W, align: 'right' }).fillColor('#000');
+  if (r.anulada === 1) doc.font('Helvetica-Bold').fillColor('#c00').fontSize(14).text('ANULADA', L, 96, { width: W, align: 'right' }).fillColor('#000');
+  if (r.pendiente) {
+    doc.font('Helvetica-Bold').fillColor('#c00').fontSize(11).text('PENDIENTE DE PAGO · NO VÁLIDA', L, 96, { width: W, align: 'right' })
+      .font('Helvetica').fontSize(8.5).text('No entregar la mercancía hasta que el pago sea aprobado', L, 111, { width: W, align: 'right' }).fillColor('#000');
+    // marca de agua en diagonal para que no pueda confundirse con una remisión válida
+    doc.save().rotate(-30, { origin: [306, 396] }).opacity(0.18).font('Helvetica-Bold').fontSize(64).fillColor('#c00')
+      .text('NO VÁLIDA', 0, 360, { width: 612, align: 'center', lineBreak: false }).restore();
+    doc.fillColor('#000').opacity(1);
+  }
 
   let y = 120;
   doc.rect(L, y, W, 58).strokeColor('#bbb').stroke();
@@ -23,7 +37,7 @@ export function remisionPdf(r, cfg) {
   doc.font('Helvetica-Bold').text('Teléfono:', L + 8, y + 36).font('Helvetica').text(r.telefono || '-', L + 60, y + 36);
   doc.font('Helvetica-Bold').text('Vendedor:', L + 300, y + 8).font('Helvetica').text(r.vendedor, L + 355, y + 8);
   doc.font('Helvetica-Bold').text('Punto:', L + 300, y + 22).font('Helvetica').text(r.punto || r.ruta || 'Mostrador', L + 355, y + 22, { width: 170 });
-  doc.font('Helvetica-Bold').text('Pago:', L + 300, y + 36).font('Helvetica').text(r.tipo_pago === 'contado' ? 'Contado' : 'Crédito', L + 355, y + 36);
+  doc.font('Helvetica-Bold').text('Pago:', L + 300, y + 36).font('Helvetica').text(textoPago(r), L + 355, y + 36, { width: 170 });
 
   y += 72;
   const cols = [L + 6, L + 60, L + 350, L + 430];
@@ -96,7 +110,11 @@ function dibujarTicket(doc, r, cfg) {
   linea();
   centro('REMISIÓN', 'Helvetica-Bold', 12);
   centro(`No. ${cfg.prefijo || 'R'}-${String(r.consecutivo).padStart(6, '0')}`, 'Helvetica-Bold', 11);
-  if (r.anulada) centro('*** ANULADA ***', 'Helvetica-Bold', 12, '#c00');
+  if (r.anulada === 1) centro('*** ANULADA ***', 'Helvetica-Bold', 12, '#c00');
+  if (r.pendiente) {
+    centro('*** PENDIENTE DE PAGO ***', 'Helvetica-Bold', 12, '#c00');
+    centro('NO VÁLIDA · No entregar la mercancía hasta que el pago sea aprobado', 'Helvetica-Bold', 8, '#c00');
+  }
   centro(r.fecha.slice(0, 16), 'Helvetica', 8.5);
   linea();
   const dato = (k, v) => {
@@ -108,7 +126,7 @@ function dibujarTicket(doc, r, cfg) {
   if (r.telefono) dato('Teléfono', r.telefono);
   dato('Vendedor', r.vendedor);
   dato('Punto', r.punto || r.ruta || 'Mostrador');
-  dato('Pago', r.tipo_pago === 'contado' ? 'Contado' : 'Crédito');
+  dato('Pago', textoPago(r));
   linea();
   for (const i of r.items) {
     doc.font('Helvetica-Bold').fontSize(9).fillColor('#000').text(i.descripcion, M, y, { width: W });
@@ -124,6 +142,7 @@ function dibujarTicket(doc, r, cfg) {
   if (!r.anulada && r.saldo > 0) par('Saldo remisión', money(r.saldo), true, 10);
   if (!r.anulada && r.saldo_cliente > 0) par('Saldo total cliente', money(r.saldo_cliente));
   if (r.nota) { y += 4; doc.font('Helvetica-Oblique').fontSize(8.5).text(`Nota: ${r.nota}`, M, y, { width: W }); y = doc.y; }
+  if (r.pendiente) { y += 6; centro('*** NO VÁLIDA HASTA APROBAR EL PAGO ***', 'Helvetica-Bold', 9, '#c00'); }
   y += 28;
   doc.moveTo(M + 20, y).lineTo(M + W - 20, y).strokeColor('#000').stroke();
   y += 3;

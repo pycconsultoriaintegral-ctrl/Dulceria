@@ -6,6 +6,7 @@ App web móvil (PWA) para controlar **compras, inventario y ventas por ruta** de
 
 - **Varias bodegas y rutas**: cada ruta pertenece a una bodega que la despacha. Una bodega recibe compras, vende directo en su **mostrador**, carga y recibe las devoluciones de sus rutas y hace **traslados a otras bodegas** (con estado *en camino* / *recibido* y registro de faltantes).
 - **Ventas por ruta**: el vendedor elige cliente y productos, contado o crédito, y genera la remisión (consecutivo automático, ticket PDF de 80 mm, compartir por WhatsApp). Puede anularla el mismo día.
+- **Pago anticipado con soporte**: el encargado o el administrador marcan a un cliente como **"paga antes"**. Sus ventas quedan **pendientes**: el PDF sale marcado *PENDIENTE DE PAGO · NO VÁLIDA*, no se descuenta inventario ni cuenta como venta o cartera. El vendedor adjunta la **foto de la transferencia** (se comprime en el celular) y el encargado de la bodega o el administrador la revisan y **aprueban o rechazan**. Al aprobar sale el inventario, el pago queda como transferencia y la remisión pasa a válida; al rechazar, queda anulada con el motivo. Nadie aprueba su propia venta (salvo el administrador) y se avisa si la misma imagen ya se usó en otra remisión. Cualquier remisión puede llevar además un soporte opcional.
 - **Sin señal**: las ventas y abonos hechos sin conexión se guardan en el celular y se envían solos al volver internet (sin duplicarse).
 - **Inventario** por bodega y por ruta, resumen general, ajustes por conteo físico y kardex.
 - **Compras**: proveedores, costo promedio ponderado, deuda con proveedores y pagos; cada compra llega a una bodega.
@@ -62,6 +63,8 @@ Para publicarla con HTTPS en un servidor propio (Docker + Caddy, con copias diar
 3. Encargado: **carga la ruta** (Inventario → ruta → Cargar ruta) antes de salir.
 4. Vendedor: vende y cobra; comparte la remisión.
 5. Al regresar: el encargado recibe la **devolución** y el vendedor hace el **cierre del día**.
+
+**Clientes que pagan antes:** en Clientes → editar, marca *Paga antes de recibir*. El vendedor hace la venta y adjunta la foto de la transferencia; el encargado (o admin) la ve en Inicio → *por aprobar*, confirma en el banco que entró el dinero y aprueba. Solo entonces el vendedor entrega la mercancía.
 
 ## Desarrollo
 

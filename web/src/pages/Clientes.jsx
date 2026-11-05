@@ -18,6 +18,7 @@ export function Clientes({ user }) {
           <div className="card list">{lista.map((c) => (
             <div key={c.id} className="item" onClick={() => ir(`/clientes/${c.id}`)}>
               <div className="grow"><div className="bold">{c.nombre}</div><div className="mut">{c.negocio}{c.ruta ? ` · ${c.ruta}` : ''}</div></div>
+              {c.paga_antes ? <span className="tag">Paga antes</span> : null}
               {c.saldo > 0.5 && <span className="tag warn">{money(c.saldo)}</span>}
             </div>))}</div>
         )}
@@ -39,7 +40,7 @@ export function ClienteDetalle({ id, user, cfg }) {
         {s.loading || s.error ? <Cargando s={s} /> : (
           <>
             <div className="card">
-              <h2 style={{ margin: 0 }}>{c.nombre}</h2>
+              <h2 style={{ margin: 0 }}>{c.nombre}{c.paga_antes ? <span className="tag warn" style={{ marginLeft: 8, verticalAlign: 'middle' }}>Paga antes</span> : null}</h2>
               <div className="mut">{c.negocio} {c.direccion && `· ${c.direccion}`}</div>
               {c.telefono && <div><a href={`tel:${c.telefono}`}>{c.telefono}</a> · <a href={`https://wa.me/${telWhatsApp(c.telefono)}`} target="_blank" rel="noreferrer">WhatsApp</a></div>}
               <div className="row between" style={{ marginTop: 10 }}>
@@ -51,7 +52,7 @@ export function ClienteDetalle({ id, user, cfg }) {
               {c.remisiones.length === 0 ? <div className="mut">Aún sin compras</div> : c.remisiones.map((r) => (
                 <div key={r.id} className="item row between" style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)', cursor: 'pointer' }} onClick={() => ir(`/remisiones/${r.id}`)}>
                   <div>{numRem(cfg, r.consecutivo)}<div className="mut">{r.fecha.slice(0, 10)}</div></div>
-                  <div className="right"><b>{money(r.total)}</b>{r.anulada ? <div className="tag mal">Anulada</div> : r.total - r.pagado > 0.5 && <div className="mut warn">Debe {money(r.total - r.pagado)}</div>}</div>
+                  <div className="right"><b>{money(r.total)}</b>{r.anulada === 2 ? <div className="tag warn">Por aprobar</div> : r.anulada ? <div className="tag mal">Anulada</div> : r.total - r.pagado > 0.5 && <div className="mut warn">Debe {money(r.total - r.pagado)}</div>}</div>
                 </div>))}
             </div>
             <div className="card"><h3>Pagos recientes</h3>
@@ -106,6 +107,7 @@ function EditarCliente({ cliente, user, onClose, onHecho }) {
       <Campo label="Teléfono" inputMode="tel" value={f.telefono || ''} onChange={set('telefono')} />
       <Campo label="Dirección" value={f.direccion || ''} onChange={set('direccion')} />
       <Campo label="Documento (CC/NIT)" value={f.documento || ''} onChange={set('documento')} />
+      {user.rol !== 'vendedor' && <label className="row" style={{ gap: 8, margin: '4px 0 12px' }}><input type="checkbox" checked={!!f.paga_antes} onChange={(e) => setF({ ...f, paga_antes: e.target.checked ? 1 : 0 })} /><span>Paga antes de recibir (exige soporte de pago aprobado)</span></label>}
       {user.rol !== 'vendedor' && <SelectorPunto bodegas={bodegas} value={f.ruta_id ? `R${f.ruta_id}` : ''} onChange={(v) => setF({ ...f, ruta_id: v.startsWith('R') ? Number(v.slice(1)) : null })} label="Ruta del cliente" mostrador={false} vacio="Sin ruta" />}
       <button className="btn block" disabled={ocupado} onClick={() => run(async () => { await put(`/clientes/${cliente.id}`, f); onHecho(); }, 'Guardado')}>Guardar</button>
     </Modal>

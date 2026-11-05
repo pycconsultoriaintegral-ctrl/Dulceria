@@ -7,7 +7,7 @@ export function Mas({ user }) {
   const [clave, setClave] = useState(false);
   const gestiona = puedeGestionar(user);
   const items = [
-    ['/cartera', '💰', 'Cartera (por cobrar)'], ['/cierre', '🧾', 'Cierre del día'],
+    ['/aprobaciones', '⏳', user.rol === 'vendedor' ? 'Mis pendientes de pago' : 'Pagos por aprobar'], ['/cartera', '💰', 'Cartera (por cobrar)'], ['/cierre', '🧾', 'Cierre del día'],
     ...(gestiona ? [['/traslados', '🚚', 'Traslados entre bodegas'], ['/compras', '📥', 'Compras y proveedores'], ['/reportes', '📊', 'Reportes'], ['/importar', '📤', 'Importar desde Excel']] : []),
     ...(admin ? [['/productos', '🍬', 'Productos'], ['/actividad', '🕵️', 'Registro de actividad'], ['/ajustes', '⚙️', 'Ajustes, bodegas, rutas y usuarios']] : []),
   ];

@@ -1,17 +1,28 @@
 // Remisiones (ventas), abonos, cartera, gastos y cierre diario. El "punto" es una ruta ('R3') o el mostrador de una bodega ('B1').
 import { Router } from 'express';
-import { db, tx, ahora, HttpError, moverStock, getConfig } from '../db.js';
+import { db, tx, ahora, HttpError, moverStock, getStock, getConfig } from '../db.js';
 import { remisionPdf, remisionTicket } from '../pdf.js';
 import { wrap, n, num, r2, req_, entero, conPrefijo } from '../util.js';
 import { B, R, getRuta, resolverPunto, sqlAlcance, sqlPunto, exigir, puedeRuta, puedeBodega, puedeUb, parseUb } from '../scope.js';
 import { puedeVerCliente } from './clientes.js';
 import { presentacionDe, aBase, precioLista } from '../presentaciones.js';
 import { auditar } from '../auditoria.js';
+import { guardarSoporte, listarSoportes, MAX_POR_REMISION } from '../soportes.js';
 
 const router = Router();
 const METODOS = ['efectivo', 'transferencia'];
 const metodoDe = (m) => { const x = String(m || 'efectivo').toLowerCase(); if (!METODOS.includes(x)) throw new HttpError(400, 'Método de pago inválido'); return x; };
-const ubDelPunto = (p) => (p.ruta_id ? R(p.ruta_id) : B(p.bodega_id));
+export const ubDelPunto = (p) => (p.ruta_id ? R(p.ruta_id) : B(p.bodega_id));
+
+// Comprueba que hay inventario para todas las líneas sin moverlo (las ventas pendientes de aprobación solo lo descuentan al aprobarse)
+function verificarStock(items, ub) {
+  const necesario = new Map();
+  for (const i of items) necesario.set(i.p.id, (necesario.get(i.p.id) ?? 0) + aBase(i.cantidad, i.pres));
+  for (const [productoId, cant] of necesario) {
+    const disponible = getStock(productoId, ub);
+    if (disponible + 1e-9 < cant) throw new HttpError(409, `Inventario insuficiente de "${db.prepare('SELECT nombre FROM productos WHERE id=?').get(productoId).nombre}" (disponible ${disponible})`);
+  }
+}
 
 // ---------- Remisiones ----------
 router.post('/remisiones', wrap((req, res) => {
@@ -44,22 +55,32 @@ router.post('/remisiones', wrap((req, res) => {
     const descuento = r2(num(b.descuento ?? 0, 'Descuento'));
     if (descuento < 0 || descuento > subtotal) throw new HttpError(400, 'Descuento inválido');
     const total = r2(subtotal - descuento);
-    if (!['contado', 'credito'].includes(b.tipo_pago)) throw new HttpError(400, 'Tipo de pago inválido');
-    const pagado = b.tipo_pago === 'contado' ? total : r2(num(b.abono ?? 0, 'Abono'));
+    // Cliente que paga antes: la remisión queda pendiente hasta que el encargado o el administrador aprueben el soporte de pago.
+    // Mientras tanto no mueve inventario ni cuenta como venta, y siempre es de contado.
+    const exige = !!cli.paga_antes;
+    const tipoPago = exige ? 'contado' : b.tipo_pago;
+    if (!['contado', 'credito'].includes(tipoPago)) throw new HttpError(400, 'Tipo de pago inválido');
+    const pagado = tipoPago === 'contado' ? total : r2(num(b.abono ?? 0, 'Abono'));
     if (pagado < 0 || pagado > total + 0.001) throw new HttpError(400, 'El abono no puede superar el total');
+    if (exige && total <= 0) throw new HttpError(400, 'Una venta con pago anticipado debe tener un total mayor a cero');
+    if (exige) verificarStock(items, ubDelPunto(punto));
     const cons = (db.prepare('SELECT MAX(consecutivo) AS m FROM remisiones').get().m ?? 0) + 1;
     const fecha = ahora();
-    const id = Number(db.prepare(`INSERT INTO remisiones (uuid,consecutivo,fecha,cliente_id,ruta_id,bodega_id,usuario_id,tipo_pago,subtotal,descuento,total,pagado,nota)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(n(b.uuid), cons, fecha, cli.id, punto.ruta_id, punto.bodega_id, req.user.id, b.tipo_pago, subtotal, descuento, total, pagado, n(b.nota)).lastInsertRowid);
+    const id = Number(db.prepare(`INSERT INTO remisiones (uuid,consecutivo,fecha,cliente_id,ruta_id,bodega_id,usuario_id,tipo_pago,subtotal,descuento,total,pagado,nota,anulada,requiere_aprobacion,fecha_solicitud)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(n(b.uuid), cons, fecha, cli.id, punto.ruta_id, punto.bodega_id, req.user.id, tipoPago, subtotal, descuento, total, exige ? 0 : pagado, n(b.nota),
+      exige ? 2 : 0, exige ? 1 : 0, exige ? fecha : null).lastInsertRowid);
     for (const i of items) {
       // la línea se guarda tal como se vendió (2 cajas a $30.000); el inventario se descuenta en unidades base
       db.prepare('INSERT INTO remision_items (remision_id,producto_id,descripcion,cantidad,precio,costo,factor,presentacion,precio_lista) VALUES (?,?,?,?,?,?,?,?,?)')
         .run(id, i.p.id, i.pres.id ? `${i.p.nombre} (${i.pres.nombre})` : i.p.nombre, i.cantidad, i.precio, i.p.costo * i.pres.factor, i.pres.factor, i.pres.nombre, i.lista);
-      moverStock({ productoId: i.p.id, ubicacion: ubDelPunto(punto), delta: -aBase(i.cantidad, i.pres), tipo: 'venta', costo: i.p.costo, referencia: `R-${cons}`, usuarioId: req.user.id });
+      if (!exige) moverStock({ productoId: i.p.id, ubicacion: ubDelPunto(punto), delta: -aBase(i.cantidad, i.pres), tipo: 'venta', costo: i.p.costo, referencia: `R-${cons}`, usuarioId: req.user.id });
     }
-    if (pagado > 0) db.prepare('INSERT INTO pagos (fecha,cliente_id,remision_id,ruta_id,bodega_id,usuario_id,valor,metodo) VALUES (?,?,?,?,?,?,?,?)')
+    if (!exige && pagado > 0) db.prepare('INSERT INTO pagos (fecha,cliente_id,remision_id,ruta_id,bodega_id,usuario_id,valor,metodo) VALUES (?,?,?,?,?,?,?,?)')
       .run(fecha, cli.id, id, punto.ruta_id, punto.bodega_id, req.user.id, pagado, metodo);
-    return { id, consecutivo: cons, total };
+    // fotos del comprobante enviadas junto con la venta (también sirven en ventas normales por transferencia)
+    for (const foto of (Array.isArray(b.soportes) ? b.soportes : []).slice(0, MAX_POR_REMISION)) guardarSoporte(id, foto, req.user);
+    if (exige) auditar(req.user, 'venta con pago anticipado', 'remision', id, `R-${cons} · ${cli.nombre} · $${total} · pendiente de aprobación`);
+    return { id, consecutivo: cons, total, pendiente: exige };
   });
   res.json(out);
 }));
@@ -74,15 +95,19 @@ router.get('/remisiones', wrap((req, res) => {
     WHERE ${cond.join(' AND ')} ORDER BY r.id DESC LIMIT 300`).all(p));
 }));
 
-function cargarRemision(u, id) {
+export function cargarRemision(u, id) {
   const r = db.prepare(`SELECT r.*, c.nombre AS cliente, c.negocio, c.telefono, c.direccion AS cliente_direccion, c.documento AS cliente_documento,
-    us.nombre AS vendedor, ru.nombre AS ruta, b.nombre AS bodega FROM remisiones r JOIN clientes c ON c.id=r.cliente_id JOIN usuarios us ON us.id=r.usuario_id
+    us.nombre AS vendedor, ru.nombre AS ruta, b.nombre AS bodega, (SELECT nombre FROM usuarios WHERE id=r.aprobado_por) AS aprobador FROM remisiones r JOIN clientes c ON c.id=r.cliente_id JOIN usuarios us ON us.id=r.usuario_id
     JOIN bodegas b ON b.id=r.bodega_id LEFT JOIN rutas ru ON ru.id=r.ruta_id WHERE r.id=?`).get(id);
   if (!r) throw new HttpError(404, 'Remisión no encontrada');
   if (u.rol === 'vendedor' && r.ruta_id !== u.ruta_id) throw new HttpError(403, 'No puedes ver remisiones de otra ruta');
   if (u.rol === 'bodeguero' && r.bodega_id !== u.bodega_id) throw new HttpError(403, 'No puedes ver remisiones de otra bodega');
   r.punto = r.ruta ? conPrefijo('Ruta', r.ruta) : `Mostrador ${r.bodega}`;
   r.items = db.prepare('SELECT * FROM remision_items WHERE remision_id=?').all(id);
+  r.pendiente = r.anulada === 2;
+  r.rechazada = r.anulada === 1 && !!r.requiere_aprobacion && !!r.aprobado_por;
+  r.soportes = listarSoportes(id);
+  if (u.rol === 'vendedor') for (const s of r.soportes) s.repetido_en = [];
   r.saldo = r.anulada ? 0 : r2(r.total - r.pagado);
   r.saldo_cliente = db.prepare('SELECT COALESCE(SUM(total-pagado),0) AS s FROM remisiones WHERE cliente_id=? AND anulada=0').get(r.cliente_id).s;
   if (u.rol === 'vendedor') for (const i of r.items) delete i.costo;
@@ -99,11 +124,12 @@ router.get('/remisiones/:id/pdf', wrap((req, res) => {
 router.post('/remisiones/:id/anular', wrap((req, res) => {
   tx(() => {
     const r = cargarRemision(req.user, entero(req.params.id));
-    if (r.anulada) throw new HttpError(409, 'La remisión ya está anulada');
+    if (r.anulada === 1) throw new HttpError(409, 'La remisión ya está anulada');
     if (req.user.rol === 'vendedor' && (r.usuario_id !== req.user.id || r.fecha.slice(0, 10) !== ahora().slice(0, 10)))
       throw new HttpError(403, 'Solo puedes anular tus remisiones del día. Pide ayuda al encargado de tu bodega o al administrador.');
     const motivo = req_(req.body.motivo, 'Indica el motivo de la anulación');
-    for (const i of db.prepare('SELECT * FROM remision_items WHERE remision_id=?').all(r.id))
+    // una remisión pendiente de aprobación nunca movió inventario ni recibió pagos: no hay nada que devolver
+    if (!r.pendiente) for (const i of db.prepare('SELECT * FROM remision_items WHERE remision_id=?').all(r.id))
       moverStock({ productoId: i.producto_id, ubicacion: ubDelPunto(r), delta: aBase(i.cantidad, { factor: i.factor }), tipo: 'anulacion_venta', costo: i.costo / i.factor, referencia: `R-${r.consecutivo}`, usuarioId: req.user.id, permitirNegativo: true });
     db.prepare('UPDATE remisiones SET anulada=1, motivo_anulacion=? WHERE id=?').run(motivo, r.id);
     db.prepare('UPDATE pagos SET anulado=1 WHERE remision_id=?').run(r.id);
