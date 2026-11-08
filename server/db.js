@@ -253,7 +253,7 @@ export function moverStock({ productoId, ubicacion, delta, tipo, costo = 0, refe
 }
 
 export function getConfig() {
-  const o = { negocio: 'Mi Dulcería', nit: '', telefono: '', direccion: '', pie_remision: 'Gracias por su compra. Documento sin validez tributaria (remisión).', prefijo: 'R' };
+  const o = { negocio: 'Panificadora Mi Pan Colombia SAS', nit: '', telefono: '', direccion: '', pie_remision: 'Gracias por su compra. Documento sin validez tributaria (remisión).', prefijo: 'R' };
   for (const r of db.prepare('SELECT clave, valor FROM config').all()) o[r.clave] = r.valor;
   return o;
 }

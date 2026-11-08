@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Logo provisional de Mi Pan POS (se reemplaza por el oficial: ver web/marca/LEEME.md) -->
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e40af"/><stop offset="1" stop-color="#0b1f4d"/></linearGradient>
+    <linearGradient id="pan" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3c66b"/><stop offset="1" stop-color="#c98a2b"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#fondo)"/>
+  <g transform="translate(256 262)">
+    <path d="M-150 40 C-160 -60 -90 -120 0 -120 C90 -120 160 -60 150 40 C148 70 120 82 90 82 L-90 82 C-120 82 -148 70 -150 40 Z" fill="url(#pan)"/>
+    <path d="M-150 40 C-148 70 -120 82 -90 82 L90 82 C120 82 148 70 150 40 C120 58 -120 58 -150 40 Z" fill="#a8681a" opacity=".55"/>
+    <g stroke="#fff3d6" stroke-width="14" stroke-linecap="round" fill="none" opacity=".9">
+      <path d="M-80 -70 C-70 -40 -70 -10 -82 20"/><path d="M0 -88 C10 -55 10 -20 -2 15"/><path d="M80 -70 C90 -40 90 -10 78 20"/>
+    </g>
+  </g>
+  <text x="256" y="430" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="54" fill="#f3c66b" letter-spacing="4">MI PAN</text>
+</svg>
