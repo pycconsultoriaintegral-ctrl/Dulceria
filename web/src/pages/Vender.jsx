@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
-import { get, post, enviar, uuid, money, qty, useCarga, ir, compartirRemision, abrirPdf, numRem, useUbicaciones, factorDe, listaDe, desglose } from '../lib.js';
+import { get, post, enviar, uuid, money, qty, useCarga, ir, compartirRemision, abrirPdf, numRem, useUbicaciones, factorDe, listaDe, desglose, puntosDe } from '../lib.js';
 import { Header, Cargando, Stepper, Modal, Campo, toast, useAccion, SelectorPunto, SelectorPresentacion } from '../ui.jsx';
 import { BotonFoto, FotosPendientes } from '../soportes.jsx';
+import { imprimirRemision, preferencias } from '../impresora.js';
+import { ahoraLocal } from '../tirilla.js';
 
 export default function Vender({ user, cfg }) {
   const elige = user.rol !== 'vendedor'; // el vendedor siempre vende de su ruta; los demás eligen el punto de venta
@@ -29,6 +31,8 @@ export default function Vender({ user, cfg }) {
   const subtotal = sel.reduce((a, p) => a + items[p.id].cantidad * items[p.id].precio, 0);
   const total = Math.max(0, subtotal - (Number(desc) || 0));
   const anticipado = !!cliente?.paga_antes; // este cliente debe pagar antes de recibir: la remisión queda pendiente de aprobación
+  const codigoPunto = elige ? punto : `R${user.ruta_id}`;
+  const nombrePunto = puntosDe(bodegas).find((x) => x.codigo === codigoPunto)?.nombre || '';
   const filtrados = useMemo(() => lista.filter((p) => p.nombre.toLowerCase().includes(buscaProd.toLowerCase())), [lista, buscaProd]);
 
   // cada línea lleva su presentación (unidad, caja, estiba…), la cantidad y el precio en esa presentación
@@ -49,7 +53,16 @@ export default function Vender({ user, cfg }) {
       items: sel.map((p) => ({ producto_id: p.id, presentacion_id: items[p.id].pres || undefined, cantidad: items[p.id].cantidad, precio: items[p.id].precio })),
     };
     const r = await enviar('venta', payload, `${cliente.nombre} · ${money(total)}`);
-    if (r.pendiente) setHecho({ sinSenal: true, total, anticipado, fotos: fotos.length });
+    // copia local de la venta para imprimir la tirilla aunque no haya señal
+    const pagado = anticipado ? 0 : tipo === 'contado' ? total : Number(abono) || 0;
+    const local = {
+      provisional: uid.slice(0, 8).toUpperCase(), fecha: ahoraLocal(), vendedor: user.nombre, punto: nombrePunto, cliente: cliente.nombre, negocio: cliente.negocio,
+      cliente_documento: cliente.documento, telefono: cliente.telefono, cliente_direccion: cliente.direccion, tipo_pago: anticipado ? 'contado' : tipo, metodo,
+      subtotal, descuento: Number(desc) || 0, total, pagado, saldo: Math.max(0, total - pagado), pendiente: anticipado, nota,
+      pagos: pagado > 0 ? [{ metodo: anticipado ? 'transferencia' : metodo, valor: pagado }] : [],
+      items: sel.map((p) => { const pres = p.presentaciones?.find((x) => x.id === Number(items[p.id].pres)); return { descripcion: pres ? `${p.nombre} (${pres.nombre})` : p.nombre, cantidad: items[p.id].cantidad, precio: items[p.id].precio }; }),
+    };
+    if (r.pendiente) setHecho({ sinSenal: true, total, anticipado, fotos: fotos.length, local });
     else setHecho({ id: r.data.id, consecutivo: r.data.consecutivo, total, anticipado: !!r.data.pendiente, fotos: fotos.length });
   });
 
@@ -166,7 +179,10 @@ function Listo({ hecho, cliente, cfg, onNueva }) {
     <><Header titulo="Venta guardada" /><main><div className="card center"><div style={{ fontSize: 48 }}>📡</div><h2>Sin señal</h2>
       <p>La venta de <b>{money(hecho.total)}</b> quedó guardada en tu celular y se enviará sola cuando vuelva la conexión. La remisión se podrá compartir después desde “Remisiones”.</p>
       {hecho.anticipado && <div className="aviso pend" style={{ textAlign: 'left' }}>Este cliente paga antes: al enviarse, la remisión quedará <b>pendiente de aprobación</b>. No entregues la mercancía hasta que se apruebe.</div>}
-      <button className="btn block" onClick={onNueva}>Nueva venta</button></div></main></>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {preferencias().metodo !== 'pdf' && <button className="btn sec" disabled={ocupado} onClick={() => run(() => imprimirRemision(hecho.local, cfg))}>🖨 Imprimir tirilla provisional</button>}
+        <button className="btn" onClick={onNueva}>Nueva venta</button>
+      </div></div></main></>
   );
   const r = { id: hecho.id, consecutivo: hecho.consecutivo, total: hecho.total, telefono: cliente?.telefono, saldo: 0 };
   return (
@@ -182,7 +198,8 @@ function Listo({ hecho, cliente, cfg, onNueva }) {
           <BotonFoto disabled={ocupado} texto={fotos ? '📷 Agregar otra foto' : '📷 Adjuntar foto de la transferencia'}
             onFoto={(imagen) => run(async () => { await post(`/remisiones/${hecho.id}/soportes`, { imagen }); setFotos((n) => n + 1); }, 'Soporte adjuntado')} />
         )}
-        <button className={hecho.anticipado ? 'btn sec' : 'btn'} disabled={ocupado} onClick={() => run(async () => compartirRemision((await get(`/remisiones/${hecho.id}`)), cfg))}>Compartir por WhatsApp</button>
+        {preferencias().metodo !== 'pdf' && <button className={hecho.anticipado ? 'btn sec' : 'btn'} disabled={ocupado} onClick={() => run(() => imprimirRemision(() => get(`/remisiones/${hecho.id}`), cfg))}>🖨 Imprimir tirilla</button>}
+        <button className={hecho.anticipado || preferencias().metodo !== 'pdf' ? 'btn sec' : 'btn'} disabled={ocupado} onClick={() => run(async () => compartirRemision((await get(`/remisiones/${hecho.id}`)), cfg))}>Compartir por WhatsApp</button>
         <button className="btn sec" disabled={ocupado} onClick={() => run(() => abrirPdf(r))}>Ver remisión (PDF)</button>
         <button className="btn gris" onClick={onNueva}>Nueva venta</button>
         <button className="btn gris" onClick={() => ir('/remisiones')}>Ver remisiones</button>

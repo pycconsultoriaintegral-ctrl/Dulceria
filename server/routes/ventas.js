@@ -105,6 +105,7 @@ export function cargarRemision(u, id) {
   r.punto = r.ruta ? conPrefijo('Ruta', r.ruta) : `Mostrador ${r.bodega}`;
   r.items = db.prepare('SELECT * FROM remision_items WHERE remision_id=?').all(id);
   r.pendiente = r.anulada === 2;
+  r.pagos = db.prepare('SELECT metodo, SUM(valor) AS valor FROM pagos WHERE remision_id=? AND anulado=0 GROUP BY metodo ORDER BY metodo').all(id);
   r.rechazada = r.anulada === 1 && !!r.requiere_aprobacion && !!r.aprobado_por;
   r.soportes = listarSoportes(id);
   if (u.rol === 'vendedor') for (const s of r.soportes) s.repetido_en = [];
@@ -118,8 +119,8 @@ router.get('/remisiones/:id/pdf', wrap((req, res) => {
   const r = cargarRemision(req.user, entero(req.params.id));
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="remision-${r.consecutivo}.pdf"`);
-  // ?formato=carta para hoja completa; por defecto ticket angosto, legible en el celular
-  (req.query.formato === 'carta' ? remisionPdf : remisionTicket)(r, getConfig()).pipe(res);
+  // ?formato=carta para hoja completa; por defecto ticket angosto de 80 mm (?papel=58 para rollos de 58 mm)
+  (req.query.formato === 'carta' ? remisionPdf(r, getConfig()) : remisionTicket(r, getConfig(), { papel: req.query.papel })).pipe(res);
 }));
 router.post('/remisiones/:id/anular', wrap((req, res) => {
   tx(() => {

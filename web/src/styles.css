@@ -79,3 +79,10 @@ input[type=date]{min-width:0;max-width:100%}
 .aviso.pend{background:#fdf1d9;border-color:#e0b25a;color:#7a4b00}
 .aviso.ok{background:#e3f4ea;border-color:#86c79b;color:#14532d}
 .aviso.mal{background:#fde8e8;border-color:#f0a5a5;color:#7f1d1d}
+
+/* Impresora */
+.opcion{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1.5px solid var(--bd);border-radius:12px;margin-bottom:8px;cursor:pointer}
+.opcion.on{border-color:var(--pri);background:#f1f5ff}
+.opcion input{margin-top:4px}
+ol.pasos{margin:0;padding-left:20px;font-size:14px}ol.pasos li{margin-bottom:6px}
+pre.tirilla{margin:0 auto;padding:12px 10px;background:#fff;border:1px dashed #b8c3d9;border-radius:6px;font:12px/1.35 ui-monospace,Menlo,Consolas,monospace;color:#111;width:max-content;max-width:100%;overflow-x:auto}

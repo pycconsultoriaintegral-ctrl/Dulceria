@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ir, get, blob, compartirRemision, descargarPdf, conPrefijo } from './lib.js';
+import { imprimirRemision, preferencias } from './impresora.js';
 
 export function Header({ titulo, atras }) {
   return (
@@ -92,7 +93,8 @@ export function VisorPdf({ cfg }) {
       <div style={{ padding: '10px 16px calc(10px + env(safe-area-inset-bottom))', background: '#fff', borderTop: '1px solid var(--bd)', display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
         <button className="btn" disabled={ocupado} onClick={() => run(async () => compartirRemision(await get(`/remisiones/${r.id}`), cfg))}>Compartir</button>
         <button className="btn sec" disabled={ocupado} onClick={() => run(() => descargarPdf(r, cfg))}>Descargar</button>
-        <button className="btn gris" style={{ gridColumn: '1 / -1' }} disabled={ocupado} onClick={() => run(() => descargarPdf(r, cfg, 'carta'))}>Descargar en hoja carta</button>
+        {preferencias().metodo !== 'pdf' && <button className="btn gris" disabled={ocupado} onClick={() => run(() => imprimirRemision(() => get(`/remisiones/${r.id}`), cfg))}>🖨 Imprimir tirilla</button>}
+        <button className="btn gris" style={preferencias().metodo !== 'pdf' ? {} : { gridColumn: '1 / -1' }} disabled={ocupado} onClick={() => run(() => descargarPdf(r, cfg, 'carta'))}>Hoja carta</button>
       </div>
     </div>
   );
