@@ -1,4 +1,6 @@
-# Dulcería Ruta
+# Mi Pan POS
+
+App de ventas por ruta, inventario y remisiones de **Panificadora Mi Pan Colombia SAS**. Marca e íconos: ver [web/marca/LEEME.md](web/marca/LEEME.md).
 
 App web móvil (PWA) para controlar **compras, inventario y ventas por ruta** de un negocio de mecato/dulces. Como no hay facturación electrónica, cada venta genera una **remisión** en PDF que se comparte por WhatsApp.
 

@@ -28,7 +28,7 @@ Mientras se termina este trámite, el administrador puede enviar el mismo resume
 
 1. **Crea la app**: entra a <https://developers.facebook.com/apps>, *Crear app* → tipo **Empresa** (Business) → elige la cuenta de Meta Business del negocio.
 2. En la app, agrega el producto **WhatsApp** y sigue *Configuración de la API*.
-3. **Agrega el número**: en *Configuración de la API → Agregar número de teléfono*, escribe el número exclusivo, el nombre que verá el dueño (ej. "Dulcería Ruta") y verifícalo con el código por SMS o llamada.
+3. **Agrega el número**: en *Configuración de la API → Agregar número de teléfono*, escribe el número exclusivo, el nombre que verá el dueño (ej. "Mi Pan POS") y verifícalo con el código por SMS o llamada.
 4. Copia el **Identificador del número de teléfono** (Phone number ID). Ese es `WHATSAPP_PHONE_ID`.
 5. **Token permanente** (el temporal dura 24 h y no sirve):
    - En business.facebook.com → *Configuración del negocio* → *Usuarios del sistema* → *Agregar*, rol **Administrador**.

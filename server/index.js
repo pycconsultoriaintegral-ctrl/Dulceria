@@ -5,6 +5,6 @@ import { iniciarProgramacion } from './whatsapp.js';
 
 asegurarAdmin();
 const port = process.env.PORT || 3000;
-crearApp().listen(port, () => console.log(`Dulcería Ruta escuchando en http://localhost:${port}`));
+crearApp().listen(port, () => console.log(`Mi Pan POS escuchando en http://localhost:${port}`));
 iniciarProgramacion(); // resumen diario por WhatsApp a la hora configurada
 process.on('SIGTERM', () => { db.close(); process.exit(0); });

@@ -25,9 +25,9 @@ function Login({ onOk }) {
   return (
     <div className="login">
       <div className="hero">
-        <div className="logo">🍬</div>
-        <h1>Dulcería Ruta</h1>
-        <p>Ventas, inventario y remisiones</p>
+        <img className="logo" src="/icon-192.png" alt="" />
+        <h1>Mi Pan POS</h1>
+        <p>Panificadora Mi Pan Colombia SAS</p>
       </div>
       <main>
         <form className="card" onSubmit={(e) => { e.preventDefault(); run(async () => { const r = await login(u, c); guardarSesion(r.token, r.user); onOk(r.user); }); }}>

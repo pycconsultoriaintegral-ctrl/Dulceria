@@ -10,7 +10,7 @@ export function Inicio({ user, cfg }) {
   const nPend = pend.data?.length || 0;
   return (
     <>
-      <Header titulo={cfg?.negocio || 'Dulcería Ruta'} />
+      <Header titulo={'Mi Pan POS'} />
       <main>
         <p className="mut" style={{ marginTop: 0 }}>Hola, <b>{user.nombre}</b> · {hoyStr()}</p>
         <button className="btn block" style={{ fontSize: 18, padding: 16, marginBottom: 12 }} onClick={() => ir('/vender')}>🛒 Nueva venta</button>
