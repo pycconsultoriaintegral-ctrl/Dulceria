@@ -2,6 +2,16 @@
 
 Resultado: la app en `https://tu-dominio`, con certificado automático, reinicio automático y copia diaria de la base de datos.
 
+## 0. Qué contratar (costos aproximados, verifica el precio vigente)
+| Qué | Recomendación | Costo aprox. |
+| --- | --- | --- |
+| Servidor (VPS) | 1 vCPU, 1-2 GB RAM, Ubuntu 24.04, **en Miami o Nueva York** (más cerca de Colombia = la app responde más rápido). Ej.: DigitalOcean, Vultr, Linode/Akamai | USD 6-12 al mes |
+| Dominio | Un `.com` o `.com.co` (ej. `ventas.tunegocio.com`). Opcional: sin dominio funciona con sslip.io | USD 12-40 al año |
+| Copias fuera del servidor | Activa los "backups" automáticos del proveedor del VPS (además de la copia diaria de la app) | +20 % del VPS |
+| WhatsApp | Ver WHATSAPP.md | Centavos de dólar al mes |
+
+Para 1 bodega, 4 carros y hasta ~3 bodegas, el VPS más pequeño sobra: la base de datos de un año de ventas pesa decenas de MB.
+
 ## 1. Servidor
 - Un VPS con Ubuntu 22.04/24.04 (1 GB de RAM alcanza), con IP pública.
 - Abre los puertos **80 y 443** (y 22 para SSH) en el firewall del proveedor.

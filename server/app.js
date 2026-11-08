@@ -16,6 +16,8 @@ import importar from './routes/importar.js';
 import exportar from './routes/exportar.js';
 import auditoria from './routes/auditoria.js';
 import aprobaciones from './routes/aprobaciones.js';
+import cuadres from './routes/cuadres.js';
+import whatsapp from './routes/whatsapp.js';
 
 export function crearApp() {
   const app = express();
@@ -54,6 +56,8 @@ export function crearApp() {
   api.use('/clientes', clientes);
   api.use(ventas);
   api.use(aprobaciones);
+  api.use(cuadres);
+  api.use(whatsapp);
   api.use('/reportes', reportes);
   api.use('/importar', importar);
   api.use('/exportar', exportar);

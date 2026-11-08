@@ -85,9 +85,9 @@ export function remisionPdf(r, cfg) {
 
 // ---------- Formato ticket (80 mm de ancho, una sola página de alto variable) ----------
 // Se lee bien en el celular sin hacer zoom y sirve para impresoras térmicas.
-const TW = 226.77; // 80 mm en puntos
+const ANCHOS = { 80: 226.77, 58: 164.41 }; // en puntos
 const M = 10;
-function dibujarTicket(doc, r, cfg) {
+function dibujarTicket(doc, r, cfg, TW) {
   const W = TW - M * 2;
   let y = M;
   const centro = (txt, font, size, color = '#000') => {
@@ -152,14 +152,15 @@ function dibujarTicket(doc, r, cfg) {
   return y + M;
 }
 
-export function remisionTicket(r, cfg) {
+export function remisionTicket(r, cfg, { papel } = {}) {
+  const TW = ANCHOS[papel] || ANCHOS[80];
   // 1.ª pasada: mide el alto en un documento desechable; 2.ª: documento real con ese alto
   const medidor = new PDFDocument({ size: [TW, 20000], margin: 0 });
   medidor.on('data', () => {});
-  const alto = Math.ceil(dibujarTicket(medidor, r, cfg));
+  const alto = Math.ceil(dibujarTicket(medidor, r, cfg, TW));
   medidor.end();
   const doc = new PDFDocument({ size: [TW, alto], margin: 0 });
-  dibujarTicket(doc, r, cfg);
+  dibujarTicket(doc, r, cfg, TW);
   doc.end();
   return doc;
 }

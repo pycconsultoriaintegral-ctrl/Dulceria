@@ -6,6 +6,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:?defínelo en .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?defínelo en .env}
       TZ_NEGOCIO: ${TZ_NEGOCIO:-America/Bogota}
+      # Resumen diario por WhatsApp (opcional, ver WHATSAPP.md)
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_PHONE_ID:-}
     volumes:
       - datos:/data
     expose: ["3000"]

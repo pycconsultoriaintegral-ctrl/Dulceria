@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { get, post, money, qty, useCarga, compartirRemision, abrirPdf, numRem, hoyStr, ir, useCola, descartarRechazada, useUbicaciones, conPrefijo } from '../lib.js';
 import { Header, Cargando, Vacio, toast, useAccion, Confirmar, SelectorPunto } from '../ui.jsx';
 import { Soportes } from '../soportes.jsx';
+import { imprimirRemision, preferencias } from '../impresora.js';
 
 // estado visible de una remisión en las listas
 export const EtiquetaEstado = ({ r }) => (r.anulada === 2 ? <span className="tag warn">Por aprobar</span>
@@ -89,6 +90,7 @@ export function RemisionDetalle({ id, user, cfg }) {
             <div style={{ display: 'grid', gap: 10 }}>
               <button className="btn" disabled={ocupado} onClick={() => run(() => compartirRemision(r, cfg))}>Compartir por WhatsApp</button>
               <button className="btn sec" disabled={ocupado} onClick={() => run(() => abrirPdf(r))}>Ver remisión (PDF)</button>
+              {preferencias().metodo !== 'pdf' && <button className="btn sec" disabled={ocupado} onClick={() => run(() => imprimirRemision(r, cfg))}>🖨 Imprimir tirilla</button>}
               {r.saldo > 0 && !r.anulada && <button className="btn sec" onClick={() => ir(`/clientes/${r.cliente_id}`)}>Registrar abono</button>}
               {puedeCancelar && <button className="btn peligro" disabled={ocupado} onClick={() => {
                 const motivo = window.prompt('Motivo para cancelar esta solicitud:');
