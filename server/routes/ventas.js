@@ -193,7 +193,7 @@ router.post('/gastos', wrap((req, res) => {
 }));
 
 // ---------- Cierre diario por punto (ruta o mostrador de bodega) ----------
-function calcularCierre(fecha, punto) {
+export function calcularCierre(fecha, punto) {
   const cp = (a) => sqlPunto(a, punto);
   const ventas = db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(total),0) AS total, COALESCE(SUM(CASE WHEN tipo_pago='contado' THEN total ELSE 0 END),0) AS contado,
     COALESCE(SUM(CASE WHEN tipo_pago='credito' THEN total ELSE 0 END),0) AS credito

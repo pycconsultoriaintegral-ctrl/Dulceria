@@ -86,3 +86,9 @@ input[type=date]{min-width:0;max-width:100%}
 .opcion input{margin-top:4px}
 ol.pasos{margin:0;padding-left:20px;font-size:14px}ol.pasos li{margin-bottom:6px}
 pre.tirilla{margin:0 auto;padding:12px 10px;background:#fff;border:1px dashed #b8c3d9;border-radius:6px;font:12px/1.35 ui-monospace,Menlo,Consolas,monospace;color:#111;width:max-content;max-width:100%;overflow-x:auto}
+
+/* Cuadre semanal */
+.pestanas{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:2px}
+.pestanas button{flex:1 0 auto;border:1.5px solid var(--bd);background:#fff;color:var(--navy);border-radius:99px;padding:8px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.pestanas button.on{background:var(--navy);border-color:var(--navy);color:#fff}
+table.conteo td input{width:70px;padding:6px;border:1px solid var(--bd);border-radius:8px;text-align:right;font-size:15px}

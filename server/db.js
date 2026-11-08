@@ -9,7 +9,7 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 // Ubicaciones de inventario: 'B<id>' = bodega, 'R<id>' = inventario en la ruta.
 // Esquema v2: varias bodegas; cada ruta pertenece a una bodega.
-const VERSION_ESQUEMA = 6;
+const VERSION_ESQUEMA = 7;
 
 const DDL = {
   config: (t) => `CREATE TABLE ${t} (clave TEXT PRIMARY KEY, valor TEXT)`,
@@ -67,7 +67,8 @@ const DDL = {
   pagos: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, fecha TEXT NOT NULL, cliente_id INTEGER NOT NULL REFERENCES clientes(id),
     remision_id INTEGER REFERENCES remisiones(id), ruta_id INTEGER, bodega_id INTEGER NOT NULL REFERENCES bodegas(id),
-    usuario_id INTEGER, valor REAL NOT NULL, metodo TEXT DEFAULT 'efectivo', nota TEXT, anulado INTEGER DEFAULT 0)`,
+    usuario_id INTEGER, valor REAL NOT NULL, metodo TEXT DEFAULT 'efectivo', nota TEXT, anulado INTEGER DEFAULT 0,
+    verificado INTEGER NOT NULL DEFAULT 0, verificado_por INTEGER, fecha_verificado TEXT)`, // verificado = la transferencia se confirmó en el banco
   gastos: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, ruta_id INTEGER, bodega_id INTEGER NOT NULL REFERENCES bodegas(id),
     usuario_id INTEGER, concepto TEXT NOT NULL, valor REAL NOT NULL)`,
@@ -75,6 +76,12 @@ const DDL = {
     id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, punto TEXT NOT NULL, ruta_id INTEGER, bodega_id INTEGER NOT NULL REFERENCES bodegas(id),
     usuario_id INTEGER, ventas_contado REAL, abonos REAL, transferencias REAL DEFAULT 0, gastos REAL, esperado REAL, entregado REAL, diferencia REAL, nota TEXT,
     UNIQUE (fecha, punto))`,
+  // Cuadre semanal (los sábados) de un punto: efectivo de la semana, transferencias verificadas, cartera, gastos y conteo físico
+  cuadres: (t) => `CREATE TABLE ${t} (
+    id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, punto TEXT NOT NULL, ruta_id INTEGER, bodega_id INTEGER NOT NULL REFERENCES bodegas(id),
+    desde TEXT NOT NULL, hasta TEXT NOT NULL, usuario_id INTEGER, ventas REAL, efectivo_esperado REAL, efectivo_entregado REAL, diferencia_efectivo REAL,
+    transferencias REAL, transferencias_verificadas REAL, gastos REAL, cartera REAL, diferencia_inventario REAL, productos_con_diferencia INTEGER,
+    ajuste_aplicado INTEGER DEFAULT 0, datos TEXT, nota TEXT, UNIQUE (punto, desde, hasta))`,
   // Registro de actividad: quién hizo qué (cambios de precios, usuarios, anulaciones, importaciones…)
   auditoria: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, usuario_id INTEGER, usuario TEXT, accion TEXT NOT NULL,
@@ -90,7 +97,7 @@ const DDL = {
     producto_id INTEGER NOT NULL REFERENCES productos(id), cantidad REAL NOT NULL, cantidad_recibida REAL)`,
 };
 const ORDEN = ['config', 'bodegas', 'rutas', 'usuarios', 'productos', 'presentaciones', 'stock', 'movimientos', 'proveedores', 'compras', 'compra_items',
-  'clientes', 'remisiones', 'soportes', 'remision_items', 'pagos', 'gastos', 'cierres', 'traslados', 'traslado_items', 'auditoria'];
+  'clientes', 'remisiones', 'soportes', 'remision_items', 'pagos', 'gastos', 'cierres', 'cuadres', 'traslados', 'traslado_items', 'auditoria'];
 const INDICES = ['CREATE INDEX IF NOT EXISTS ix_mov_prod ON movimientos(producto_id, fecha)',
   'CREATE INDEX IF NOT EXISTS ix_rem_fecha ON remisiones(fecha)', 'CREATE INDEX IF NOT EXISTS ix_pagos_fecha ON pagos(fecha)', 'CREATE INDEX IF NOT EXISTS ix_aud_fecha ON auditoria(fecha)',
   'CREATE INDEX IF NOT EXISTS ix_sop_rem ON soportes(remision_id)', 'CREATE INDEX IF NOT EXISTS ix_sop_huella ON soportes(huella)'];
@@ -168,6 +175,12 @@ const MIGRACIONES = {
     agregarColumna('remisiones', 'fecha_solicitud', 'TEXT');
     agregarColumna('remisiones', 'aprobado_por', 'INTEGER');
     agregarColumna('remisiones', 'fecha_aprobacion', 'TEXT');
+  },
+  // v7: cuadre semanal (la tabla cuadres la crea crearEsquema) y verificación de transferencias en el banco
+  7: () => {
+    agregarColumna('pagos', 'verificado', 'INTEGER NOT NULL DEFAULT 0');
+    agregarColumna('pagos', 'verificado_por', 'INTEGER');
+    agregarColumna('pagos', 'fecha_verificado', 'TEXT');
   },
 };
 
