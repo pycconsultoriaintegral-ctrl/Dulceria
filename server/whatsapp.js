@@ -3,6 +3,7 @@
 // Credenciales solo por variables de entorno: WHATSAPP_TOKEN y WHATSAPP_PHONE_ID (nunca en la base de datos).
 import { db, ahora, hoy, getConfig } from './db.js';
 import { r2, conPrefijo } from './util.js';
+import { alertasInventario, textoAlertas } from './alertas.js';
 
 const API = () => (process.env.WHATSAPP_API_URL || 'https://graph.facebook.com').replace(/\/$/, '');
 const VERSION = () => process.env.WHATSAPP_API_VERSION || 'v23.0';
@@ -44,8 +45,10 @@ export function resumenDelDia(fecha = hoy()) {
   const nombres = (codigos) => codigos.map((c) => (c[0] === 'R' ? conPrefijo('Ruta', db.prepare('SELECT nombre FROM rutas WHERE id=?').get(Number(c.slice(1)))?.nombre) : `Mostrador ${db.prepare('SELECT nombre FROM bodegas WHERE id=?').get(Number(c.slice(1)))?.nombre}`));
   const textoCierres = !conMov.length ? 'sin movimiento' : sinCierre.length ? `${conMov.length - sinCierre.length} de ${conMov.length} (faltan ${nombres(sinCierre).join(', ')})`
     : `todos (${conMov.length})${Math.abs(diferencia) >= 1 ? `, diferencia ${diferencia < 0 ? '-' : '+'}${pesos(Math.abs(diferencia))}` : ', sin diferencias'}`;
+  // alertas de inventario de todo el negocio (bodegas y carros)
+  const inv = alertasInventario({ rol: 'admin' });
   return {
-    fecha, remisiones: v.n, ventas: r2(v.total), efectivo: r2(p.efectivo), transferencias: r2(p.transf), gastos: r2(gastos), cartera: r2(cartera),
+    fecha, remisiones: v.n, inventario: textoAlertas(inv), alertas: inv.resumen, ventas: r2(v.total), efectivo: r2(p.efectivo), transferencias: r2(p.transf), gastos: r2(gastos), cartera: r2(cartera),
     por_aprobar: porAprobar, puntos_con_movimiento: conMov.length, puntos_sin_cierre: nombres(sinCierre), diferencia_cierres: diferencia, por_punto: porPunto, texto_cierres: textoCierres,
   };
 }
@@ -55,9 +58,9 @@ const fechaLarga = (f) => { const [y, m, d] = f.split('-'); return `${Number(d)}
 // Los parámetros de una plantilla no pueden llevar saltos de línea, tabulaciones ni más de 4 espacios seguidos
 const limpiar = (t) => String(t).replace(/[\n\t]+/g, ' ').replace(/ {4,}/g, '   ').slice(0, 300);
 
-// Parámetros {{1}}…{{9}} en el orden de la plantilla de WHATSAPP.md
+// Parámetros {{1}}…{{10}} en el orden de la plantilla de WHATSAPP.md
 export function parametros(r) {
-  return [fechaLarga(r.fecha), pesos(r.ventas), String(r.remisiones), pesos(r.efectivo), pesos(r.transferencias), pesos(r.gastos), r.texto_cierres, pesos(r.cartera), String(r.por_aprobar)].map(limpiar);
+  return [fechaLarga(r.fecha), pesos(r.ventas), String(r.remisiones), pesos(r.efectivo), pesos(r.transferencias), pesos(r.gastos), r.texto_cierres, pesos(r.cartera), String(r.por_aprobar), r.inventario].map(limpiar);
 }
 
 // El mismo resumen en texto libre: vista previa y envío manual con el botón de WhatsApp
@@ -66,6 +69,7 @@ export function texto(r, cfg = getConfig()) {
     `🛒 Vendido: *${pesos(r.ventas)}* (${r.remisiones} remisiones)`, `💵 Efectivo cobrado: ${pesos(r.efectivo)}`, `📲 Transferencias: ${pesos(r.transferencias)}`,
     `⛽ Gastos: ${pesos(r.gastos)}`, `🧾 Cierres de caja: ${r.texto_cierres}`, `📒 Por cobrar (cartera): ${pesos(r.cartera)}`];
   if (r.por_aprobar) l.push(`⏳ Pagos por aprobar: ${r.por_aprobar}`);
+  l.push(`📦 Inventario: ${r.inventario}`);
   if (r.por_punto.length) { l.push('', '*Por punto:*'); for (const x of r.por_punto) l.push(`• ${x.nombre}: ${pesos(x.total)} (${x.remisiones})`); }
   return l.join('\n');
 }

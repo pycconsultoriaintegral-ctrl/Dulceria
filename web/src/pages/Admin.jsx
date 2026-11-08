@@ -13,7 +13,7 @@ export function Productos() {
     <>
       <Header titulo="Productos" atras="/mas" />
       <main>
-        <div className="row"><input className="q grow" placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} /><button className="btn" style={{ marginBottom: 10 }} onClick={() => setEd({ nombre: '', unidad: 'und', precio: '', costo: '', stock_minimo: 0, presentaciones: [] })}>+ Nuevo</button></div>
+        <div className="row"><input className="q grow" placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} /><button className="btn" style={{ marginBottom: 10 }} onClick={() => setEd({ nombre: '', unidad: 'und', precio: '', costo: '', stock_minimo: 0, minimo_carro: 0, presentaciones: [] })}>+ Nuevo</button></div>
         {s.loading || s.error ? <Cargando s={s} /> : (
           <div className="card list">{s.data.filter((p) => p.nombre.toLowerCase().includes(q.toLowerCase())).map((p) => (
             <div key={p.id} className="item" onClick={() => setEd(p)} style={{ opacity: p.activo ? 1 : 0.5 }}>
@@ -36,7 +36,11 @@ function EditarProducto({ p, onClose, onHecho }) {
       <Campo label="Nombre *" value={f.nombre} onChange={set('nombre')} />
       <div className="grid2"><Campo label="Código" value={f.codigo || ''} onChange={set('codigo')} /><Campo label="Unidad" value={f.unidad} onChange={set('unidad')} /></div>
       <div className="grid2"><Campo label="Precio de venta" inputMode="decimal" value={f.precio} onChange={set('precio')} /><Campo label="Costo" inputMode="decimal" value={f.costo} onChange={set('costo')} /></div>
-      <Campo label="Alerta de stock mínimo (en unidades)" inputMode="decimal" value={f.stock_minimo} onChange={set('stock_minimo')} />
+      <div className="grid2">
+        <Campo label={`Mínimo en bodega (${f.unidad || 'und'})`} inputMode="decimal" value={f.stock_minimo ?? 0} onChange={set('stock_minimo')} />
+        <Campo label={`Mínimo en cada carro (${f.unidad || 'und'})`} inputMode="decimal" value={f.minimo_carro ?? 0} onChange={set('minimo_carro')} />
+      </div>
+      <p className="mut" style={{ marginTop: -6 }}>Cuando quede esa cantidad o menos, avisa en Inicio y en el resumen de WhatsApp. 0 = sin alerta.</p>
       <div className="card" style={{ background: '#f4f7fe' }}>
         <h3>Presentaciones</h3>
         <p className="mut" style={{ marginTop: 0 }}>El inventario se lleva en <b>{f.unidad || 'und'}</b>. Agrega cómo se compra o vende por mayor y cuántas {f.unidad || 'unidades'} trae cada una.</p>

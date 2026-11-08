@@ -27,6 +27,7 @@ export function Ajustes({ cfgRefrescar }) {
             <Campo label="Dirección" value={v.direccion} onChange={set('direccion')} />
             <Campo label="Prefijo del consecutivo" value={v.prefijo} onChange={set('prefijo')} />
             <label className="f">Mensaje al pie<textarea rows={2} value={v.pie_remision} onChange={set('pie_remision')} /></label>
+            <Campo label="Alertar productos sin salidas después de (días)" inputMode="numeric" value={v.dias_sin_movimiento ?? '3'} onChange={set('dias_sin_movimiento')} />
             <button className="btn block" disabled={ocupado} onClick={() => run(async () => { await put('/config', v); cfgRefrescar(); }, 'Guardado')}>Guardar</button>
           </div>
         )}

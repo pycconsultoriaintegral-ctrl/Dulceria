@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { get, money, qty, useCarga, hoyStr, useUbicaciones, esAdmin, descargarCsv } from '../lib.js';
+import { get, money, qty, useCarga, hoyStr, useUbicaciones, esAdmin, descargarCsv, descargar, ir } from '../lib.js';
 import { Header, Cargando, Campo, SelectorBodega, useAccion } from '../ui.jsx';
 
 export function Reportes({ user }) {
@@ -43,7 +43,21 @@ export function Reportes({ user }) {
             <div className="card"><h3>Productos más vendidos</h3>
               <table className="t"><thead><tr><th>Producto</th><th className="n">Cant.</th><th className="n">Ventas</th><th className="n">Utilidad</th></tr></thead>
                 <tbody>{d.top_productos.map((p) => <tr key={p.nombre}><td>{p.nombre}</td><td className="n">{qty(p.cantidad)} <span className="mut">{p.unidad}</span></td><td className="n">{money(p.ventas)}</td><td className="n ok">{money(p.utilidad)}</td></tr>)}</tbody></table></div>
-            <div className="card"><h3>Descargar para Excel</h3>
+            <div className="card"><h3>📊 Informes en Excel</h3>
+              <p className="mut" style={{ marginTop: 0 }}>Del {desde} al {hasta}{esAdmin(user) && bodega ? ', de la bodega elegida' : ''}, comparados con el periodo anterior de los mismos días. Con totales, filtros y formato de pesos.</p>
+              <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {periodosRapidos().map(([t, a, b]) => <button key={t} className={'btn sm ' + (desde === a && hasta === b ? '' : 'gris')} onClick={() => { setDesde(a); setHasta(b); }}>{t}</button>)}
+              </div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {[['vendedores', '👤 Vendedores', 'ventas, clientes, descuentos, utilidad, cierres'], ['productos', '🥖 Productos', 'más y menos vendidos, margen, inventario, bajo mínimo, sin movimiento'],
+                  ['clientes', '🧾 Clientes', 'compras, última compra, frecuencia, deuda, quiénes dejaron de comprar']].map(([k, t, sub]) => (
+                  <button key={k} className="btn block" style={{ textAlign: 'left' }} disabled={ocupado}
+                    onClick={() => run(() => descargar(`/informes/${k}.xlsx?desde=${desde}&hasta=${hasta}${bodega ? `&bodega_id=${bodega}` : ''}`, `informe-${k}-${desde}-a-${hasta}.xlsx`), 'Informe descargado')}>
+                    {t}<div style={{ fontWeight: 400, fontSize: 12, opacity: 0.85 }}>{sub}</div></button>))}
+              </div>
+            </div>
+            <div className="card" style={{ cursor: 'pointer' }} onClick={() => ir('/alertas')}><div className="row between"><b>📦 Alertas de inventario</b><span className="mut">Ver ›</span></div></div>
+            <div className="card"><h3>Datos sueltos (CSV)</h3>
               <p className="mut" style={{ marginTop: 0 }}>Usan las fechas{esAdmin(user) && bodega ? ' y la bodega' : ''} de arriba.</p>
               <div className="grid2">
                 {[['ventas', 'Ventas (por producto)', `desde=${desde}&hasta=${hasta}${bodega ? `&bodega_id=${bodega}` : ''}`], ['cierres', 'Cierres del día', `desde=${desde}&hasta=${hasta}${bodega ? `&bodega_id=${bodega}` : ''}`],
@@ -59,6 +73,17 @@ export function Reportes({ user }) {
       </main>
     </>
   );
+}
+// Atajos de periodo: [texto, desde, hasta]
+function periodosRapidos() {
+  const h = hoyStr();
+  const f = (d) => new Date(`${d}T12:00:00Z`);
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const lunes = new Date(f(h)); lunes.setUTCDate(lunes.getUTCDate() - ((lunes.getUTCDay() + 6) % 7));
+  const mesAnt = new Date(f(h)); mesAnt.setUTCDate(1); mesAnt.setUTCMonth(mesAnt.getUTCMonth() - 1);
+  const finMesAnt = new Date(f(h)); finMesAnt.setUTCDate(0);
+  const hace30 = new Date(f(h)); hace30.setUTCDate(hace30.getUTCDate() - 29);
+  return [['Esta semana', iso(lunes), h], ['Este mes', h.slice(0, 8) + '01', h], ['Mes anterior', iso(mesAnt), iso(finMesAnt)], ['Últimos 30 días', iso(hace30), h]];
 }
 const Kpi = ({ l, v, sub }) => <div className="kpi"><div className="l">{l}</div><div className="v">{v}</div>{sub && <div className="l">{sub}</div>}</div>;
 

@@ -18,6 +18,8 @@ import auditoria from './routes/auditoria.js';
 import aprobaciones from './routes/aprobaciones.js';
 import cuadres from './routes/cuadres.js';
 import whatsapp from './routes/whatsapp.js';
+import informes from './routes/informes.js';
+import alertas from './routes/alertas.js';
 
 export function crearApp() {
   const app = express();
@@ -58,6 +60,8 @@ export function crearApp() {
   api.use(aprobaciones);
   api.use(cuadres);
   api.use(whatsapp);
+  api.use(informes);
+  api.use(alertas);
   api.use('/reportes', reportes);
   api.use('/importar', importar);
   api.use('/exportar', exportar);
