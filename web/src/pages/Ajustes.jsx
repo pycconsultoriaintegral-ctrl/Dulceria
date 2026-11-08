@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { get, post, put, useCarga, ROL_NOMBRE } from '../lib.js';
+import { get, post, put, useCarga, ROL_NOMBRE, telWhatsApp } from '../lib.js';
 import { Header, Cargando, Modal, Campo, useAccion, toast } from '../ui.jsx';
 
 export function Ajustes({ cfgRefrescar }) {
@@ -69,6 +69,7 @@ export function Ajustes({ cfgRefrescar }) {
           ))}
           <button className="btn sec block" style={{ marginTop: 8 }} onClick={() => setEd({ tipo: 'usuario', dato: { nombre: '', usuario: '', rol: 'vendedor', ruta_id: '', bodega_id: '', activo: 1, nuevo: true } })}>+ Nuevo usuario</button>
         </div>
+        <ResumenWhatsApp />
       </main>
       {ed?.tipo === 'bodega' && <EditarBodega b={ed.dato} onClose={() => setEd(null)} onHecho={() => { setEd(null); recargar(); }} />}
       {ed?.tipo === 'ruta' && <EditarRuta r={ed.dato} bodegas={bodegas.data || []} onClose={() => setEd(null)} onHecho={() => { setEd(null); recargar(); }} />}
@@ -141,5 +142,57 @@ function EditarUsuario({ u, bodegas, rutas, onClose, onHecho }) {
       {!u.nuevo && <label className="f"><input type="checkbox" checked={!!f.activo} onChange={(e) => setF({ ...f, activo: e.target.checked ? 1 : 0 })} style={{ display: 'inline', width: 'auto' }} /> Activo</label>}
       <button className="btn block" disabled={ocupado} onClick={() => run(async () => { const b = { ...f }; if (!b.clave) delete b.clave; u.nuevo ? await post('/usuarios', b) : await put(`/usuarios/${u.id}`, b); onHecho(); }, 'Guardado')}>Guardar</button>
     </Modal>
+  );
+}
+
+// Resumen diario por WhatsApp al dueño (API oficial de Meta; mientras tanto, envío manual con un toque)
+function ResumenWhatsApp() {
+  const s = useCarga(() => get('/whatsapp'), []);
+  const [f, setF] = useState(null);
+  const [ocupado, run] = useAccion();
+  const d = s.data;
+  if (s.loading || s.error) return <div className="card"><h3>Resumen diario por WhatsApp</h3><Cargando s={s} /></div>;
+  const v = f || { activo: d.activo, numeros: d.numeros.map((x) => (x.startsWith('57') && x.length === 12 ? x.slice(2) : x)).join(', '), hora: d.hora, plantilla: d.plantilla, idioma: d.idioma };
+  const set = (k) => (e) => setF({ ...v, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
+  const guardar = () => run(async () => {
+    await put('/config', { whatsapp_activo: v.activo ? '1' : '0', whatsapp_numeros: v.numeros, whatsapp_hora: v.hora, whatsapp_plantilla: v.plantilla, whatsapp_idioma: v.idioma });
+    setF(null); s.recargar();
+  }, 'Guardado');
+  const primero = telWhatsApp(String(v.numeros).split(/[,;\n]+/)[0]);
+  return (
+    <div className="card">
+      <h3>Resumen diario por WhatsApp</h3>
+      {d.configurado ? <div className="aviso ok">✅ Conectado a la API oficial de WhatsApp.</div>
+        : <div className="aviso pend">Falta conectar la API oficial de WhatsApp en el servidor (ver <b>WHATSAPP.md</b>). Mientras tanto puedes enviar el resumen con el botón verde.</div>}
+      <label className="row" style={{ gap: 8, marginBottom: 12 }}><input type="checkbox" checked={!!v.activo} onChange={set('activo')} /><span>Enviar el resumen automáticamente todos los días</span></label>
+      <Campo label="WhatsApp del dueño (separa varios con coma)" inputMode="tel" placeholder="3001234567" value={v.numeros} onChange={set('numeros')} />
+      <div className="grid2">
+        <Campo label="Hora de envío" type="time" value={v.hora} onChange={set('hora')} />
+        <Campo label="Plantilla aprobada en Meta" value={v.plantilla} onChange={set('plantilla')} />
+      </div>
+      <button className="btn block" disabled={ocupado} onClick={guardar}>Guardar</button>
+      <h3 style={{ marginTop: 16 }}>Vista previa de hoy</h3>
+      <pre className="tirilla" style={{ width: '100%', whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 14 }}>{d.texto}</pre>
+      <div className="row" style={{ marginTop: 10 }}>
+        <a className="btn grow" style={{ background: '#16a34a', textAlign: 'center', textDecoration: 'none' }} target="_blank" rel="noreferrer"
+          href={`https://wa.me/${primero}?text=${encodeURIComponent(d.texto)}`}>Enviar ahora por WhatsApp</a>
+        {d.configurado && <button className="btn sec grow" disabled={ocupado || f !== null} onClick={() => run(async () => {
+          const r = (await post('/whatsapp/probar')).resultados;
+          s.recargar();
+          const malos = r.filter((x) => !x.ok);
+          if (malos.length) throw new Error(malos.map((x) => `${x.para || ''} ${x.error}`).join(' · '));
+        }, 'Resumen enviado por la API')}>Probar envío automático</button>}
+      </div>
+      {d.envios.length > 0 && (
+        <>
+          <h3 style={{ marginTop: 16 }}>Últimos envíos</h3>
+          {d.envios.slice(0, 8).map((e, i) => (
+            <div key={i} className="row between mut" style={{ padding: '3px 0' }}>
+              <span>{e.fecha.slice(0, 16)} · {e.para}{e.tipo === 'prueba' ? ' (prueba)' : ''}{e.detalle ? <div className="mal">{e.detalle}</div> : null}</span>
+              <span className={e.estado === 'enviado' ? 'tag ok' : 'tag mal'}>{e.estado}</span>
+            </div>))}
+        </>
+      )}
+    </div>
   );
 }

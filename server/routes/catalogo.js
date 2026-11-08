@@ -5,14 +5,27 @@ import { soloAdmin, hashClave } from '../auth.js';
 import { wrap, n, num, req_, entero } from '../util.js';
 import { presentacionesDe, guardarPresentaciones } from '../presentaciones.js';
 import { auditar, diferencias } from '../auditoria.js';
+import { normalizarNumero } from '../whatsapp.js';
 import { B, R, getBodega, getRuta, ubicacionesPermitidas, esAdminOBodeguero, parseUb, puedeUb } from '../scope.js';
 
 const router = Router();
 
 // ---------- Configuración ----------
-router.get('/config', (_req, res) => { const c = getConfig(); delete c.jwt_secret; res.json(c); });
+router.get('/config', (req, res) => {
+  const c = getConfig();
+  delete c.jwt_secret;
+  // los números y ajustes del resumen por WhatsApp solo los ve el administrador
+  if (req.user?.rol !== 'admin') for (const k of Object.keys(c)) if (k.startsWith('whatsapp_')) delete c[k];
+  res.json(c);
+});
 router.put('/config', soloAdmin, wrap((req, res) => {
-  for (const k of ['negocio', 'nit', 'telefono', 'direccion', 'pie_remision', 'prefijo']) {
+  if (req.body.whatsapp_hora !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(req.body.whatsapp_hora)) throw new HttpError(400, 'La hora del resumen debe ser HH:MM (ej. 20:00)');
+  if (req.body.whatsapp_numeros !== undefined) {
+    const malos = String(req.body.whatsapp_numeros).split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean).filter((x) => normalizarNumero(x).length < 11);
+    if (malos.length) throw new HttpError(400, `Número de WhatsApp inválido: ${malos.join(', ')} (usa 10 dígitos, ej. 3001234567)`);
+  }
+  if (req.body.whatsapp_plantilla !== undefined && !/^[a-z0-9_]{1,512}$/.test(req.body.whatsapp_plantilla)) throw new HttpError(400, 'El nombre de la plantilla solo lleva minúsculas, números y _');
+  for (const k of ['negocio', 'nit', 'telefono', 'direccion', 'pie_remision', 'prefijo', 'whatsapp_activo', 'whatsapp_numeros', 'whatsapp_hora', 'whatsapp_plantilla', 'whatsapp_idioma']) {
     if (req.body[k] !== undefined) db.prepare('INSERT INTO config (clave,valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor').run(k, String(req.body[k]));
   }
   auditar(req.user, 'editar', 'config', null, 'Datos del negocio');

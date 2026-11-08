@@ -154,8 +154,8 @@ export function textoPlano(r, cfg = {}, opciones = {}) {
   const { ancho, renglones: rs } = renglones(r, cfg, opciones);
   return rs.map((x) => {
     if (x.a !== 'c') return x.t;
-    const w = x.g ? Math.floor(ancho / 2) : ancho;
-    return ' '.repeat(Math.max(0, Math.floor((w - x.t.length) / 2))) + x.t;
+    // en papel la letra grande ocupa el doble; en la vista previa se centra sobre el ancho completo
+    return ' '.repeat(Math.max(0, Math.floor((ancho - x.t.length) / 2))) + x.t;
   }).join('\n');
 }
 

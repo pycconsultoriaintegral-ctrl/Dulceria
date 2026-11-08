@@ -82,6 +82,10 @@ const DDL = {
     desde TEXT NOT NULL, hasta TEXT NOT NULL, usuario_id INTEGER, ventas REAL, efectivo_esperado REAL, efectivo_entregado REAL, diferencia_efectivo REAL,
     transferencias REAL, transferencias_verificadas REAL, gastos REAL, cartera REAL, diferencia_inventario REAL, productos_con_diferencia INTEGER,
     ajuste_aplicado INTEGER DEFAULT 0, datos TEXT, nota TEXT, UNIQUE (punto, desde, hasta))`,
+  // Envíos del resumen diario por WhatsApp (para no repetirlos y para ver errores)
+  envios_whatsapp: (t) => `CREATE TABLE ${t} (
+    id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, fecha_resumen TEXT NOT NULL, para TEXT NOT NULL, tipo TEXT NOT NULL,
+    estado TEXT NOT NULL CHECK (estado IN ('enviado','error')), mensaje_id TEXT, detalle TEXT)`,
   // Registro de actividad: quién hizo qué (cambios de precios, usuarios, anulaciones, importaciones…)
   auditoria: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, fecha TEXT NOT NULL, usuario_id INTEGER, usuario TEXT, accion TEXT NOT NULL,
@@ -97,7 +101,7 @@ const DDL = {
     producto_id INTEGER NOT NULL REFERENCES productos(id), cantidad REAL NOT NULL, cantidad_recibida REAL)`,
 };
 const ORDEN = ['config', 'bodegas', 'rutas', 'usuarios', 'productos', 'presentaciones', 'stock', 'movimientos', 'proveedores', 'compras', 'compra_items',
-  'clientes', 'remisiones', 'soportes', 'remision_items', 'pagos', 'gastos', 'cierres', 'cuadres', 'traslados', 'traslado_items', 'auditoria'];
+  'clientes', 'remisiones', 'soportes', 'remision_items', 'pagos', 'gastos', 'cierres', 'cuadres', 'envios_whatsapp', 'traslados', 'traslado_items', 'auditoria'];
 const INDICES = ['CREATE INDEX IF NOT EXISTS ix_mov_prod ON movimientos(producto_id, fecha)',
   'CREATE INDEX IF NOT EXISTS ix_rem_fecha ON remisiones(fecha)', 'CREATE INDEX IF NOT EXISTS ix_pagos_fecha ON pagos(fecha)', 'CREATE INDEX IF NOT EXISTS ix_aud_fecha ON auditoria(fecha)',
   'CREATE INDEX IF NOT EXISTS ix_sop_rem ON soportes(remision_id)', 'CREATE INDEX IF NOT EXISTS ix_sop_huella ON soportes(huella)'];
@@ -176,7 +180,7 @@ const MIGRACIONES = {
     agregarColumna('remisiones', 'aprobado_por', 'INTEGER');
     agregarColumna('remisiones', 'fecha_aprobacion', 'TEXT');
   },
-  // v7: cuadre semanal (la tabla cuadres la crea crearEsquema) y verificación de transferencias en el banco
+  // v7: cuadre semanal y envíos de WhatsApp (las tablas nuevas las crea crearEsquema) y verificación de transferencias en el banco
   7: () => {
     agregarColumna('pagos', 'verificado', 'INTEGER NOT NULL DEFAULT 0');
     agregarColumna('pagos', 'verificado_por', 'INTEGER');

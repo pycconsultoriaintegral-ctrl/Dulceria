@@ -115,7 +115,7 @@ function DetalleCuadre({ punto, qs }) {
             <div className="card">
               <div className="row between"><span>Vendido (contado {money(t.contado)} · crédito {money(t.credito)})</span><b>{money(t.ventas)}</b></div>
               <div className="row between"><span>💵 Cobrado en efectivo</span><b>{money(t.efectivo)}</b></div>
-              <div className="row between"><span>Gastos</span><b className="mal">−{money(t.gastos)}</b></div>
+              <div className="row between"><span>Gastos</span><b className={t.gastos ? 'mal' : ''}>{t.gastos ? '−' : ''}{money(t.gastos)}</b></div>
               <div className="row between"><span>Efectivo que debía entregar</span><b>{money(t.esperado)}</b></div>
               <div className="row between"><span>Entregado en los cierres</span><b>{money(t.entregado)}</b></div>
               <hr />
