@@ -59,7 +59,8 @@ test('el resumen del día: ventas, cobros, gastos, cierres pendientes, cartera',
   r = wa.resumenDelDia();
   assert.equal(r.texto_cierres, 'todos (1), diferencia -$500');
   const p = wa.parametros(r);
-  assert.equal(p.length, 9);
+  assert.equal(p.length, 10);
+  assert.equal(p[9], 'sin alertas');
   assert.equal(p[1], '$15.000');
   assert.ok(p.every((x) => !/[\n\t]/.test(x) && !/ {4,}/.test(x)), 'los parámetros de plantilla no admiten saltos de línea');
   const vista = (await call('GET', '/whatsapp', null, admin)).body;
@@ -88,7 +89,7 @@ test('con credenciales: envía la plantilla a cada número y registra el envío'
   assert.equal(m.body.to, '573001234567');
   assert.equal(m.body.template.name, 'resumen_diario');
   assert.equal(m.body.template.language.code, 'es');
-  assert.equal(m.body.template.components[0].parameters.length, 9);
+  assert.equal(m.body.template.components[0].parameters.length, 10);
   const envios = (await call('GET', '/whatsapp', null, ctx.admin)).body.envios;
   assert.equal(envios.filter((e) => e.estado === 'enviado' && e.tipo === 'prueba').length, 2);
   // el token nunca sale por la API

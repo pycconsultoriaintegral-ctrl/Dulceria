@@ -8,12 +8,20 @@ export function Inicio({ user, cfg }) {
   // remisiones de clientes que pagan antes y esperan aprobación (si no hay señal, simplemente no se muestra)
   const pend = useCarga(() => get('/aprobaciones').catch(() => []), []);
   const nPend = pend.data?.length || 0;
+  const alertas = useCarga(() => get('/alertas/inventario').catch(() => null), []);
+  const al = alertas.data?.resumen;
   return (
     <>
       <Header titulo={'Mi Pan POS'} />
       <main>
         <p className="mut" style={{ marginTop: 0 }}>Hola, <b>{user.nombre}</b> · {hoyStr()}</p>
         <button className="btn block" style={{ fontSize: 18, padding: 16, marginBottom: 12 }} onClick={() => ir('/vender')}>🛒 Nueva venta</button>
+        {al && (al.bajo_minimo > 0 || al.sin_movimiento > 0) && (
+          <div className={'aviso ' + (al.agotados ? 'mal' : 'pend')} style={{ cursor: 'pointer' }} onClick={() => ir('/alertas')}>
+            <b>📦 Inventario:</b> {al.bajo_minimo > 0 && <>{al.bajo_minimo} bajo mínimo{al.agotados ? ` (${al.agotados} agotados)` : ''}</>}
+            {al.bajo_minimo > 0 && al.sin_movimiento > 0 && ' · '}{al.sin_movimiento > 0 && <>{al.sin_movimiento} sin movimiento</>}
+            <div>Toca para ver qué reponer.</div>
+          </div>)}
         {nPend > 0 && (
           <div className="aviso pend" style={{ cursor: 'pointer' }} onClick={() => ir('/aprobaciones')}>
             <b>⏳ {nPend} {nPend === 1 ? 'remisión' : 'remisiones'} {admin ? 'por aprobar' : 'pendiente(s) de pago'}</b>

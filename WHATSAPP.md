@@ -11,6 +11,7 @@ Gastos: $45.000
 Cierres de caja: 4 de 5 (faltan Ruta Carro 3)
 Por cobrar (cartera): $2.140.000
 Pagos por aprobar: 1
+Inventario: 3 bajo mínimo (1 agotados): Pan tajado, Mogolla, Roscón; 2 sin movimiento hace 3+ días
 ```
 
 Mientras se termina este trámite, el administrador puede enviar el mismo resumen con un toque en
@@ -49,10 +50,11 @@ Mientras se termina este trámite, el administrador puede enviar el mismo resume
      Cierres de caja: {{7}}
      Por cobrar (cartera): {{8}}
      Pagos por aprobar: {{9}}
+     Inventario: {{10}}
 
      Mensaje automático de tu sistema de ventas.
      ```
-   - Meta pide ejemplos para cada variable: `8 nov 2026`, `$1.250.000`, `38`, `$820.000`, `$310.000`, `$45.000`, `4 de 5`, `$2.140.000`, `1`.
+   - Meta pide ejemplos para cada variable: `8 nov 2026`, `$1.250.000`, `38`, `$820.000`, `$310.000`, `$45.000`, `4 de 5`, `$2.140.000`, `1`, `3 bajo mínimo: Pan tajado, Mogolla, Roscón`.
    - Envíala a revisión. Suele aprobarse en minutos u horas. Si la rechazan, ajusta el texto fijo (no el orden de las variables) y, si cambias el nombre, ponlo en Ajustes.
 
 ## Conectar el servidor
@@ -84,7 +86,7 @@ El error exacto queda en *Últimos envíos*. Los más comunes:
 | Mensaje | Qué hacer |
 | --- | --- |
 | *Template name does not exist* / plantilla no aprobada | La plantilla aún no está aprobada, o el nombre o idioma en Ajustes no coincide con el de Meta |
-| *Number of parameters does not match* | El cuerpo de la plantilla no tiene exactamente las 9 variables `{{1}}`…`{{9}}` |
+| *Number of parameters does not match* | El cuerpo de la plantilla no tiene exactamente las 10 variables `{{1}}`…`{{10}}` |
 | *Invalid OAuth access token* | El token se copió mal o es el temporal de 24 h. Genera el permanente (paso 5) |
 | *Payment method required* / cuenta sin pago | Falta la tarjeta (paso 6) |
 | *Recipient phone number not in allowed list* | Estás usando el número de prueba de Meta: agrega tu propio número (paso 3) |

@@ -192,12 +192,13 @@ export function desglose(cantidad, presentaciones = [], unidad = 'und') {
   return partes.join(' + ');
 }
 
-// Descarga un CSV del servidor (con la sesión) para abrirlo en Excel
-export async function descargarCsv(url, nombre) {
+// Descarga un archivo del servidor (con la sesión): CSV o Excel (.xlsx)
+export async function descargar(url, nombreArchivo) {
   const archivo = await blob(url);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(archivo);
-  a.download = `${nombre}-${hoyStr()}.csv`;
+  a.download = nombreArchivo;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
+export const descargarCsv = (url, nombre) => descargar(url, `${nombre}-${hoyStr()}.csv`);

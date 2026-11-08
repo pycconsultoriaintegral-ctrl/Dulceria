@@ -25,7 +25,8 @@ router.put('/config', soloAdmin, wrap((req, res) => {
     if (malos.length) throw new HttpError(400, `Número de WhatsApp inválido: ${malos.join(', ')} (usa 10 dígitos, ej. 3001234567)`);
   }
   if (req.body.whatsapp_plantilla !== undefined && !/^[a-z0-9_]{1,512}$/.test(req.body.whatsapp_plantilla)) throw new HttpError(400, 'El nombre de la plantilla solo lleva minúsculas, números y _');
-  for (const k of ['negocio', 'nit', 'telefono', 'direccion', 'pie_remision', 'prefijo', 'whatsapp_activo', 'whatsapp_numeros', 'whatsapp_hora', 'whatsapp_plantilla', 'whatsapp_idioma']) {
+  if (req.body.dias_sin_movimiento !== undefined && !(Number.isInteger(Number(req.body.dias_sin_movimiento)) && Number(req.body.dias_sin_movimiento) >= 1 && Number(req.body.dias_sin_movimiento) <= 365)) throw new HttpError(400, 'Los días sin movimiento deben ser un número entre 1 y 365');
+  for (const k of ['negocio', 'nit', 'telefono', 'direccion', 'pie_remision', 'prefijo', 'dias_sin_movimiento', 'whatsapp_activo', 'whatsapp_numeros', 'whatsapp_hora', 'whatsapp_plantilla', 'whatsapp_idioma']) {
     if (req.body[k] !== undefined) db.prepare('INSERT INTO config (clave,valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor').run(k, String(req.body[k]));
   }
   auditar(req.user, 'editar', 'config', null, 'Datos del negocio');
@@ -160,19 +161,21 @@ function guardarProductoTx(req, id) {
   const precio = num(b.precio ?? 0, 'Precio'), costo = num(b.costo ?? 0, 'Costo');
   if (precio < 0 || costo < 0) throw new HttpError(400, 'Precio y costo no pueden ser negativos');
   const minimo = num(b.stock_minimo ?? 0, 'Stock mínimo');
+  const minimoCarro = num(b.minimo_carro ?? 0, 'Mínimo en carro');
+  if (minimo < 0 || minimoCarro < 0) throw new HttpError(400, 'Los mínimos no pueden ser negativos');
   if (id) {
     const antes = db.prepare('SELECT * FROM productos WHERE id=?').get(id);
     if (!antes) throw new HttpError(404, 'Producto no encontrado');
-    const nuevos = { codigo: n(b.codigo), nombre, unidad: b.unidad || 'und', precio, costo, stock_minimo: minimo, activo: b.activo === undefined ? undefined : Number(b.activo) };
-    const cambios = diferencias(antes, nuevos, ['codigo', 'nombre', 'unidad', 'precio', 'costo', 'stock_minimo', 'activo']);
+    const nuevos = { codigo: n(b.codigo), nombre, unidad: b.unidad || 'und', precio, costo, stock_minimo: minimo, minimo_carro: minimoCarro, activo: b.activo === undefined ? undefined : Number(b.activo) };
+    const cambios = diferencias(antes, nuevos, ['codigo', 'nombre', 'unidad', 'precio', 'costo', 'stock_minimo', 'minimo_carro', 'activo']);
     if (cambios) auditar(req.user, 'editar', 'producto', id, `${antes.nombre}: ${cambios}`);
-    db.prepare('UPDATE productos SET codigo=?,nombre=?,unidad=?,precio=?,costo=?,stock_minimo=?,activo=COALESCE(?,activo) WHERE id=?')
-      .run(n(b.codigo), nombre, b.unidad || 'und', precio, costo, minimo, b.activo === undefined ? null : Number(b.activo), id);
+    db.prepare('UPDATE productos SET codigo=?,nombre=?,unidad=?,precio=?,costo=?,stock_minimo=?,minimo_carro=?,activo=COALESCE(?,activo) WHERE id=?')
+      .run(n(b.codigo), nombre, b.unidad || 'und', precio, costo, minimo, minimoCarro, b.activo === undefined ? null : Number(b.activo), id);
     guardarPresentaciones(id, b.presentaciones);
     return id;
   }
-  const nuevo = Number(db.prepare('INSERT INTO productos (codigo,nombre,unidad,precio,costo,stock_minimo) VALUES (?,?,?,?,?,?)')
-    .run(n(b.codigo), nombre, b.unidad || 'und', precio, costo, minimo).lastInsertRowid);
+  const nuevo = Number(db.prepare('INSERT INTO productos (codigo,nombre,unidad,precio,costo,stock_minimo,minimo_carro) VALUES (?,?,?,?,?,?,?)')
+    .run(n(b.codigo), nombre, b.unidad || 'und', precio, costo, minimo, minimoCarro).lastInsertRowid);
   guardarPresentaciones(nuevo, b.presentaciones);
   auditar(req.user, 'crear', 'producto', nuevo, `${nombre} · precio ${precio} · costo ${costo}`);
   return nuevo;

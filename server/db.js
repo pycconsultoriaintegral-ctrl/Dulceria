@@ -9,7 +9,7 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 // Ubicaciones de inventario: 'B<id>' = bodega, 'R<id>' = inventario en la ruta.
 // Esquema v2: varias bodegas; cada ruta pertenece a una bodega.
-const VERSION_ESQUEMA = 7;
+const VERSION_ESQUEMA = 8;
 
 const DDL = {
   config: (t) => `CREATE TABLE ${t} (clave TEXT PRIMARY KEY, valor TEXT)`,
@@ -22,7 +22,8 @@ const DDL = {
     ruta_id INTEGER REFERENCES rutas(id), bodega_id INTEGER REFERENCES bodegas(id), activo INTEGER DEFAULT 1)`,
   productos: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, codigo TEXT, nombre TEXT NOT NULL, unidad TEXT DEFAULT 'und',
-    precio REAL NOT NULL DEFAULT 0, costo REAL NOT NULL DEFAULT 0, stock_minimo REAL DEFAULT 0, activo INTEGER DEFAULT 1)`,
+    precio REAL NOT NULL DEFAULT 0, costo REAL NOT NULL DEFAULT 0, stock_minimo REAL DEFAULT 0, activo INTEGER DEFAULT 1,
+    minimo_carro REAL NOT NULL DEFAULT 0)`, // stock_minimo: alerta en cada bodega; minimo_carro: alerta en cada carro (ruta)
   // Presentaciones de un producto: el inventario siempre se lleva en la unidad base; factor = unidades base que trae la presentación
   presentaciones: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, producto_id INTEGER NOT NULL REFERENCES productos(id), nombre TEXT NOT NULL,
@@ -186,6 +187,8 @@ const MIGRACIONES = {
     agregarColumna('pagos', 'verificado_por', 'INTEGER');
     agregarColumna('pagos', 'fecha_verificado', 'TEXT');
   },
+  // v8: mínimo de inventario en cada carro (para las alertas de inventario)
+  8: () => agregarColumna('productos', 'minimo_carro', 'REAL NOT NULL DEFAULT 0'),
 };
 
 function aplicarMigraciones() {
