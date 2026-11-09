@@ -6,7 +6,7 @@ import { wrap } from '../util.js';
 import { leerObjetos, leerNumero, normalizar } from '../csv.js';
 import { aBase } from '../presentaciones.js';
 import { auditar } from '../auditoria.js';
-import { exigir, esAdminOBodeguero, puedeUb, puedeRuta, parseUb } from '../scope.js';
+import { exigir, esAdminOBodeguero, puedeUb, puedeRuta, parseUb, getRuta, getBodega } from '../scope.js';
 
 const router = Router();
 const MAX_FILAS = 5000;
@@ -22,7 +22,7 @@ function tabla(req, alias, obligatorios) {
 }
 const resumen = (filas) => {
   const r = { crear: 0, actualizar: 0, ajustar: 0, sin_cambios: 0, errores: 0 };
-  for (const f of filas) { if (f.error) r.errores++; else r[f.accion]++; }
+  for (const f of filas) { if (f.error) r.errores++; else r[f.accion] = (r[f.accion] || 0) + 1; } // sin_contar solo aparece en conteos con celdas vacías
   return r;
 };
 const numero = (valor, campo, f) => {
@@ -39,7 +39,8 @@ const ALIAS_PRODUCTO = {
   unidad: ['unidad', 'und', 'medida', 'unidad base'],
   precio: ['precio', 'precio venta', 'precio de venta', 'pvp', 'valor', 'precio publico'],
   costo: ['costo', 'precio compra', 'costo compra', 'precio de compra'],
-  minimo: ['minimo', 'stock minimo', 'stock min', 'min', 'alerta'],
+  minimo: ['minimo', 'stock minimo', 'stock min', 'min', 'alerta', 'minimo bodega', 'minimo en bodega'],
+  minimo_carro: ['minimo carro', 'minimo en carro', 'minimo en cada carro', 'minimo por carro', 'minimo ruta'],
 };
 router.post('/productos', soloAdmin, wrap((req, res) => {
   const t = tabla(req, ALIAS_PRODUCTO, ['nombre']);
@@ -53,7 +54,7 @@ router.post('/productos', soloAdmin, wrap((req, res) => {
     const clave = normalizar(r.codigo || r.nombre);
     if (vistos.has(clave)) { f.error = `Repetido en el archivo (ya está en la línea ${vistos.get(clave)})`; return f; }
     vistos.set(clave, r._linea);
-    const campos = { precio: numero(r.precio, 'Precio', f), costo: numero(r.costo, 'Costo', f), stock_minimo: numero(r.minimo, 'Stock mínimo', f) };
+    const campos = { precio: numero(r.precio, 'Precio', f), costo: numero(r.costo, 'Costo', f), stock_minimo: numero(r.minimo, 'Stock mínimo', f), minimo_carro: numero(r.minimo_carro, 'Mínimo en carro', f) };
     if (f.error) return f;
     if (r.unidad) campos.unidad = r.unidad;
     if (r.codigo) campos.codigo = r.codigo;
@@ -73,10 +74,10 @@ router.post('/productos', soloAdmin, wrap((req, res) => {
       for (const f of filas) {
         if (f.error) continue;
         const d = f.datos;
-        if (f.accion === 'crear') db.prepare('INSERT INTO productos (codigo,nombre,unidad,precio,costo,stock_minimo) VALUES (?,?,?,?,?,?)')
-          .run(d.codigo ?? null, d.nombre, d.unidad ?? 'und', d.precio ?? 0, d.costo ?? 0, d.stock_minimo ?? 0);
-        else if (f.accion === 'actualizar') db.prepare('UPDATE productos SET codigo=COALESCE(?,codigo), nombre=?, unidad=COALESCE(?,unidad), precio=COALESCE(?,precio), costo=COALESCE(?,costo), stock_minimo=COALESCE(?,stock_minimo) WHERE id=?')
-          .run(d.codigo ?? null, d.nombre, d.unidad ?? null, d.precio ?? null, d.costo ?? null, d.stock_minimo ?? null, f.id);
+        if (f.accion === 'crear') db.prepare('INSERT INTO productos (codigo,nombre,unidad,precio,costo,stock_minimo,minimo_carro) VALUES (?,?,?,?,?,?,?)')
+          .run(d.codigo ?? null, d.nombre, d.unidad ?? 'und', d.precio ?? 0, d.costo ?? 0, d.stock_minimo ?? 0, d.minimo_carro ?? 0);
+        else if (f.accion === 'actualizar') db.prepare('UPDATE productos SET codigo=COALESCE(?,codigo), nombre=?, unidad=COALESCE(?,unidad), precio=COALESCE(?,precio), costo=COALESCE(?,costo), stock_minimo=COALESCE(?,stock_minimo), minimo_carro=COALESCE(?,minimo_carro) WHERE id=?')
+          .run(d.codigo ?? null, d.nombre, d.unidad ?? null, d.precio ?? null, d.costo ?? null, d.stock_minimo ?? null, d.minimo_carro ?? null, f.id);
       }
     });
   }
@@ -164,7 +165,15 @@ router.post('/inventario', wrap((req, res) => {
   const ub = req.body.ub;
   parseUb(ub);
   exigir(puedeUb(req.user, ub), 'No tienes permiso sobre esa ubicación');
-  const t = tabla(req, ALIAS_CONTEO, ['cantidad']);
+  // La cantidad puede venir en una columna "cantidad", en la que el usuario elija (ej. "Carro 2" de una plantilla con una
+  // columna por lugar) o en una con el nombre del lugar contado (ej. "Bodega principal", "Ruta Norte", "Norte").
+  const p = parseUb(ub);
+  const nombre = p.tipo === 'B' ? getBodega(p.id)?.nombre : getRuta(p.id)?.nombre;
+  const delLugar = nombre ? [normalizar(nombre), normalizar(`${p.tipo === 'B' ? 'bodega' : 'ruta'} ${nombre}`), ...(p.tipo === 'B' ? ['bodega'] : [])] : [];
+  const columna = req.body.columna ? normalizar(req.body.columna) : null;
+  const alias = { ...ALIAS_CONTEO, cantidad: columna ? [columna] : [...ALIAS_CONTEO.cantidad, ...delLugar] };
+  const t = tabla(req, alias, ['cantidad']);
+  t.columna = t.encabezados[t.indice.cantidad];
   if (t.indice.producto === undefined && t.indice.codigo === undefined) throw new HttpError(400, 'Falta la columna "producto" (o "codigo") en la primera fila');
   const productos = db.prepare('SELECT id, codigo, nombre, unidad FROM productos WHERE activo=1').all();
   const porCodigo = new Map(productos.filter((p) => p.codigo).map((p) => [normalizar(p.codigo), p]));
@@ -177,6 +186,7 @@ router.post('/inventario', wrap((req, res) => {
     f.producto = p.nombre;
     if (vistos.has(p.id)) { f.error = `Repetido en el archivo (ya está en la línea ${vistos.get(p.id)})`; return f; }
     vistos.set(p.id, r._linea);
+    if (r.cantidad === '') { f.accion = 'sin_contar'; return f; } // celda vacía: ese producto no se contó en este lugar
     let real = leerNumero(r.cantidad);
     if (real === null || real < 0) { f.error = `Cantidad inválida: "${r.cantidad}"`; return f; }
     if (r.presentacion && normalizar(r.presentacion) !== normalizar(p.unidad ?? '')) {
@@ -198,7 +208,7 @@ router.post('/inventario', wrap((req, res) => {
     });
   }
   if (req.body.aplicar) auditar(req.user, 'importar', 'inventario', null, `${ub} · ${JSON.stringify(resumen(filas))}`);
-  res.json({ aplicado: !!req.body.aplicar, resumen: resumen(filas), filas });
+  res.json({ aplicado: !!req.body.aplicar, resumen: resumen(filas), columna: t.columna, filas });
 }));
 
 // ---------- Presentaciones de productos existentes ----------

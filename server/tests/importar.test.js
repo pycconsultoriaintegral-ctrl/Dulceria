@@ -130,3 +130,29 @@ test('importar el conteo de inventario de una bodega', async () => {
   assert.equal((await call('POST', '/importar/inventario', { texto: 'producto;cantidad\nJULYPAN GRANDE;10', ub: `B${b2}`, aplicar: true }, luis)).status, 200);
   assert.equal((await call('POST', '/importar/inventario', { texto: 'producto;cantidad\nJULYPAN GRANDE;10', ub: 'X1' }, admin)).status, 400);
 });
+
+test('plantilla de carga inicial: productos con mínimos y una columna de cantidad por lugar', async () => {
+  const { admin, b1 } = ctx;
+  const ruta = (await call('POST', '/rutas', { nombre: 'Carro 7', bodega_id: b1 }, admin)).body.id;
+  // como la copia Excel: tabuladores, precios con formato de pesos y celdas vacías
+  const hoja = ['Producto\tPrecio\tCosto\tMínimo bodega\tMínimo carro\tBodega\tCarro 7',
+    'MANTECADAS X 14\t$ 16,000\t$ 11,200\t10\t3\t40\t6',
+    'ROLLO X 10\t$ 11.500\t\t5\t2\t12\t'].join('\n');
+  const prod = (await call('POST', '/importar/productos', { texto: hoja, aplicar: true }, admin)).body;
+  assert.equal(prod.resumen.crear, 2);
+  const lista = (await call('GET', '/productos?todos=1', null, admin)).body;
+  const mant = lista.find((p) => p.nombre === 'MANTECADAS X 14');
+  assert.deepEqual([mant.precio, mant.costo, mant.stock_minimo, mant.minimo_carro], [16000, 11200, 10, 3]);
+  // bodega: columna automática por el nombre del lugar ("Bodega")
+  const bod = (await call('POST', '/importar/inventario', { texto: hoja, ub: `B${b1}`, aplicar: true }, admin)).body;
+  assert.equal(bod.columna, 'bodega');
+  assert.equal(bod.resumen.ajustar, 2);
+  // carro: columna elegida; la celda vacía queda "sin contar" (no se pone en cero)
+  const carro = (await call('POST', '/importar/inventario', { texto: hoja, ub: `R${ruta}`, columna: 'Carro 7', aplicar: true }, admin)).body;
+  assert.equal(carro.columna, 'carro 7');
+  assert.deepEqual([carro.resumen.ajustar, carro.resumen.sin_contar, carro.resumen.errores], [1, 1, 0]);
+  const inv = (await call('GET', `/inventario?ub=R${ruta}`, null, admin)).body.productos;
+  assert.equal(inv.find((p) => p.id === mant.id).cantidad, 6);
+  // una columna que no existe se explica
+  assert.match((await call('POST', '/importar/inventario', { texto: hoja, ub: `R${ruta}`, columna: 'Carro 9' }, admin)).body.error, /Falta la columna/);
+});
