@@ -37,6 +37,9 @@ services:
       BACKUP_DIR: /respaldos
     command: ["sh", "-c", "while true; do node server/backup.js; sleep 86400; done"]
     user: root
+    # no es un servidor web: el chequeo de salud de la imagen (pensado para la app) no aplica aquí
+    healthcheck:
+      disable: true
 
 volumes:
   datos:
