@@ -5,7 +5,7 @@ import { Header, Cargando, useAccion, toast } from '../ui.jsx';
 const TIPOS = {
   productos: {
     titulo: 'Productos', solo: 'admin',
-    ayuda: 'Columnas: nombre (obligatoria), código, unidad, precio, costo, mínimo. Si el producto ya existe (por código o nombre) se actualiza solo lo que traiga el archivo.',
+    ayuda: 'Columnas: nombre (obligatoria), código, unidad, precio, costo, mínimo bodega y mínimo carro. Si el producto ya existe (por código o nombre) se actualiza solo lo que traiga el archivo. Las demás columnas (por ejemplo, las cantidades) se ignoran.',
     plantilla: 'nombre;codigo;unidad;precio;costo;minimo\nJULYPAN GRANDE;JP1;und;1500;1000;20\nESTIBA JULYPAN;JP-E;estiba;300000;200000;2\n',
   },
   presentaciones: {
@@ -20,7 +20,7 @@ const TIPOS = {
   },
   inventario: {
     titulo: 'Conteo de inventario',
-    ayuda: 'Columnas: producto (o código), cantidad y, si cuentas por mayor, presentación (ej. 130 · estiba). El inventario de la ubicación elegida queda igual al conteo; las diferencias quedan en el kardex como ajuste. Los productos deben existir.',
+    ayuda: 'Columnas: producto (o código) y la cantidad. Si tu hoja tiene una columna por lugar (Bodega, Carro 1, Carro 2…), pégala completa y elige abajo qué columna corresponde al lugar que estás cargando; repite con cada lugar. Las celdas vacías se toman como no contadas. El inventario del lugar queda igual al conteo y las diferencias quedan en el kardex como ajuste. Los productos deben existir.',
     plantilla: 'producto;cantidad;presentacion\nJULYPAN GRANDE;25898;und\nJULYPAN GRANDE;130;estiba\n',
   },
 };
@@ -31,7 +31,9 @@ async function leerArchivo(file) {
   try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return new TextDecoder('windows-1252').decode(buf); }
 }
 
-const ETIQUETA = { crear: ['Nuevo', 'ok'], actualizar: ['Actualiza', ''], ajustar: ['Ajusta', ''], sin_cambios: ['Sin cambios', ''] };
+const ETIQUETA = { crear: ['Nuevo', 'ok'], actualizar: ['Actualiza', ''], ajustar: ['Ajusta', ''], sin_cambios: ['Sin cambios', ''], sin_contar: ['No contado', ''] };
+// títulos de la primera fila pegada (Excel separa con tabulador; un CSV, con ; o ,)
+const titulosDe = (texto) => { const l = String(texto).split(/\r?\n/)[0] || ''; const sep = l.includes('\t') ? '\t' : l.includes(';') ? ';' : ','; return l.split(sep).map((x) => x.trim().replace(/^"|"$/g, '')).filter(Boolean); };
 
 export function Importar({ user }) {
   const { bodegas } = useUbicaciones();
@@ -40,13 +42,14 @@ export function Importar({ user }) {
   const [texto, setTexto] = useState('');
   const [ub, setUb] = useState(user.rol === 'bodeguero' ? `B${user.bodega_id}` : '');
   const [res, setRes] = useState(null);
+  const [columna, setColumna] = useState(''); // columna de la cantidad (vacío = automática)
   const [ocupado, run] = useAccion();
   const archivo = useRef(null);
   const t = TIPOS[tipo];
 
   const enviar = (aplicar) => run(async () => {
     if (tipo === 'inventario' && !ub) throw new Error('Elige la bodega o ruta que contaste');
-    const r = await post(`/importar/${tipo}`, { texto, aplicar, ub: tipo === 'inventario' ? ub : undefined });
+    const r = await post(`/importar/${tipo}`, { texto, aplicar, ub: tipo === 'inventario' ? ub : undefined, columna: tipo === 'inventario' && columna ? columna : undefined });
     setRes(r);
     if (aplicar) { toast(`Importación lista: ${r.resumen.crear + r.resumen.actualizar + r.resumen.ajustar} fila(s) aplicadas`); setTexto(''); }
   });
@@ -63,7 +66,7 @@ export function Importar({ user }) {
       <Header titulo="Importar desde Excel" atras="/mas" />
       <main>
         <div className="row wrap" style={{ marginBottom: 10 }}>
-          {tipos.map(([k, v]) => <button key={k} className={'btn sm ' + (tipo === k ? '' : 'gris')} onClick={() => { setTipo(k); setRes(null); setTexto(''); }}>{v.titulo}</button>)}
+          {tipos.map(([k, v]) => <button key={k} className={'btn sm ' + (tipo === k ? '' : 'gris')} onClick={() => { setTipo(k); setRes(null); setTexto(''); setColumna(''); }}>{v.titulo}</button>)}
         </div>
         <div className="card">
           <p className="mut" style={{ marginTop: 0 }}>{t.ayuda}</p>
@@ -92,6 +95,13 @@ export function Importar({ user }) {
               onChange={async (e) => { const f = e.target.files[0]; if (f) { setTexto(await leerArchivo(f)); setRes(null); } e.target.value = ''; }} />
             <span className="mut grow right">{texto ? `${texto.split(/\r?\n/).filter((l) => l.trim()).length - 1} fila(s)` : ''}</span>
           </div>
+          {tipo === 'inventario' && titulosDe(texto).length > 2 && (
+            <label className="f" style={{ marginTop: 10 }}>Columna con la cantidad de este lugar
+              <select value={columna} onChange={(e) => { setColumna(e.target.value); setRes(null); }}>
+                <option value="">Automática (cantidad o el nombre del lugar)</option>
+                {titulosDe(texto).map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </label>)}
           <button className="btn block" style={{ marginTop: 10 }} disabled={ocupado || !texto.trim()} onClick={() => enviar(false)}>2. Ver vista previa</button>
         </div>
         {res && (
@@ -102,6 +112,8 @@ export function Importar({ user }) {
               {res.resumen.actualizar > 0 && <span className="tag">{res.resumen.actualizar} se actualizan</span>}
               {res.resumen.ajustar > 0 && <span className="tag">{res.resumen.ajustar} se ajustan</span>}
               {res.resumen.sin_cambios > 0 && <span className="tag">{res.resumen.sin_cambios} sin cambios</span>}
+              {res.resumen.sin_contar > 0 && <span className="tag">{res.resumen.sin_contar} sin contar</span>}
+              {res.columna && <span className="mut">Cantidades de la columna «{res.columna}»</span>}
               {res.resumen.errores > 0 && <span className="tag mal">{res.resumen.errores} con error</span>}
             </div>
             <div className="list" style={{ maxHeight: 360, overflow: 'auto' }}>
