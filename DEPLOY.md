@@ -39,6 +39,37 @@ Abre la dirección en Chrome (Android) o Safari (iPhone) → menú → **Agregar
   `scp -r usuario@IP:~/Dulceria/respaldos .`
 - **Restaurar**: `docker compose stop app`, copia el respaldo sobre el volumen (`docker compose cp respaldos/dulceria-XXXX.db app:/data/dulceria.db`) y `docker compose start app`.
 
+### Respaldo en Google Drive (todos los días, fuera del servidor)
+Sube cada noche una copia a una carpeta aparte de Google Drive ("Respaldos Mi Pan POS") y conserva los últimos 30 días.
+Usa **rclone** con el permiso `drive.file`: el servidor solo puede ver los archivos que él mismo sube, nunca el resto del Drive.
+
+1. **En el servidor**, instala rclone y pon la hora de Colombia:
+   ```bash
+   curl https://rclone.org/install.sh | sudo bash
+   sudo timedatectl set-timezone America/Bogota
+   ```
+2. **Autoriza tu Google Drive** (una sola vez). En el servidor ejecuta `rclone config` y responde:
+   - `n` (nuevo remoto) → nombre: `gdrive`
+   - tipo de almacenamiento: escribe `drive`
+   - `client_id` y `client_secret`: Enter (vacíos)
+   - `scope`: elige **`drive.file`** (acceso solo a lo que suba rclone)
+   - `service_account_file`: Enter · `Edit advanced config?`: `n`
+   - `Use web browser to automatically authenticate?`: **`n`** (el servidor no tiene navegador)
+   - rclone muestra una línea `rclone authorize "drive" "…"`. Cópiala.
+3. **En tu computador** (Windows): descarga rclone de <https://rclone.org/downloads/> (Windows, Intel/AMD 64 bits), descomprime el zip y,
+   en Git Bash dentro de esa carpeta, pega la línea copiada empezando con `./rclone.exe authorize "drive" "…"`. Se abre el navegador:
+   entra con tu cuenta de Google y acepta. Git Bash muestra un texto largo (el token): cópialo completo.
+4. **De vuelta en el servidor**, pega el token donde dice `config_token>`, responde `n` a *shared drive* y `y` para guardar; luego `q` para salir.
+   Comprueba: `rclone lsd gdrive:` (no debe dar error).
+5. **Prueba el respaldo y prográmalo** a las 11:30 p. m.:
+   ```bash
+   ~/Dulceria/scripts/respaldo-drive.sh && tail -5 ~/respaldo-drive.log
+   (crontab -l 2>/dev/null; echo "30 23 * * * $HOME/Dulceria/scripts/respaldo-drive.sh") | crontab -
+   ```
+   En tu Drive aparece la carpeta **Respaldos Mi Pan POS** con el archivo `dulceria-AAAA-MM-DD-HH-MM.db`.
+
+Si algún día falla, el motivo queda en `~/respaldo-drive.log`. Para cambiar la carpeta o los días: variables `DRIVE_DESTINO` y `DRIVE_DIAS` en la línea de `crontab -e`.
+
 ## 6. Actualizar
 ```bash
 git pull && docker compose up -d --build
