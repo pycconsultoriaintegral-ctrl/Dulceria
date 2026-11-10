@@ -4,7 +4,7 @@
 # y borra de esa carpeta las copias de más de N días. El registro queda en ~/respaldo-drive.log.
 set -eu
 cd "$(dirname "$0")/.."
-DESTINO="${DRIVE_DESTINO:-gdrive:Respaldos Mi Pan POS}"
+DESTINO="${DRIVE_DESTINO:-gdrive:}" # la raíz del remoto es la carpeta de respaldos (root_folder_id)
 DIAS="${DRIVE_DIAS:-30}"
 LOG="${HOME:-/tmp}/respaldo-drive.log"
 {

@@ -40,35 +40,45 @@ Abre la dirección en Chrome (Android) o Safari (iPhone) → menú → **Agregar
 - **Restaurar**: `docker compose stop app`, copia el respaldo sobre el volumen (`docker compose cp respaldos/dulceria-XXXX.db app:/data/dulceria.db`) y `docker compose start app`.
 
 ### Respaldo en Google Drive (todos los días, fuera del servidor)
-Sube cada noche una copia a una carpeta aparte de Google Drive ("Respaldos Mi Pan POS") y conserva los últimos 30 días.
-Usa **rclone** con el permiso `drive.file`: el servidor solo puede ver los archivos que él mismo sube, nunca el resto del Drive.
+Sube cada noche una copia a una carpeta de tu Google Drive y conserva los últimos 30 días. Usa **rclone**, configurado para
+trabajar **solo dentro de esa carpeta** (`root_folder_id`): todo lo que sube y borra ocurre ahí.
 
-1. **En el servidor**, instala rclone y pon la hora de Colombia:
+> El permiso que entrega Google (`drive`) cubre todo el Drive de la cuenta, aunque rclone solo use la carpeta. Protege el
+> acceso al servidor (la llave SSH) y, si algún día quieres revocarlo, hazlo en <https://myaccount.google.com/permissions>.
+
+1. **Crea la carpeta** en Google Drive (ej. "Mi Pan Pos Respaldos") y copia su **ID**: es la parte final de la dirección
+   `https://drive.google.com/drive/folders/ESTE_ES_EL_ID`.
+2. **En el servidor**, instala rclone y pon la hora de Colombia:
    ```bash
    curl https://rclone.org/install.sh | sudo bash
    sudo timedatectl set-timezone America/Bogota
    ```
-2. **Autoriza tu Google Drive** (una sola vez). En el servidor ejecuta `rclone config` y responde:
+3. **Autoriza tu Google Drive** (una sola vez). En el servidor ejecuta `rclone config` y responde:
    - `n` (nuevo remoto) → nombre: `gdrive`
    - tipo de almacenamiento: escribe `drive`
    - `client_id` y `client_secret`: Enter (vacíos)
-   - `scope`: elige **`drive.file`** (acceso solo a lo que suba rclone)
+   - `scope`: elige **`drive`** (el primero, acceso completo; ver la nota de arriba)
    - `service_account_file`: Enter · `Edit advanced config?`: `n`
    - `Use web browser to automatically authenticate?`: **`n`** (el servidor no tiene navegador)
    - rclone muestra una línea `rclone authorize "drive" "…"`. Cópiala.
-3. **En tu computador** (Windows): descarga rclone de <https://rclone.org/downloads/> (Windows, Intel/AMD 64 bits), descomprime el zip y,
+4. **En tu computador** (Windows): descarga rclone de <https://rclone.org/downloads/> (Windows, Intel/AMD 64 bits), descomprime el zip y,
    en Git Bash dentro de esa carpeta, pega la línea copiada empezando con `./rclone.exe authorize "drive" "…"`. Se abre el navegador:
    entra con tu cuenta de Google y acepta. Git Bash muestra un texto largo (el token): cópialo completo.
-4. **De vuelta en el servidor**, pega el token donde dice `config_token>`, responde `n` a *shared drive* y `y` para guardar; luego `q` para salir.
-   Comprueba: `rclone lsd gdrive:` (no debe dar error).
-5. **Prueba el respaldo y prográmalo** a las 11:30 p. m.:
+5. **De vuelta en el servidor**, pega el token donde dice `config_token>`, responde `n` a *shared drive* y `y` para guardar; luego `q`.
+   Amarra rclone a la carpeta (cambia el ID por el tuyo) y comprueba:
+   ```bash
+   rclone config update gdrive root_folder_id ESTE_ES_EL_ID
+   rclone lsd gdrive:
+   ```
+   `rclone lsd gdrive:` no debe dar error (la carpeta está vacía, así que no lista nada).
+6. **Prueba el respaldo y prográmalo** a las 11:30 p. m.:
    ```bash
    ~/Dulceria/scripts/respaldo-drive.sh && tail -5 ~/respaldo-drive.log
    (crontab -l 2>/dev/null; echo "30 23 * * * $HOME/Dulceria/scripts/respaldo-drive.sh") | crontab -
    ```
-   En tu Drive aparece la carpeta **Respaldos Mi Pan POS** con el archivo `dulceria-AAAA-MM-DD-HH-MM.db`.
+   En la carpeta de Drive aparece el archivo `dulceria-AAAA-MM-DD-HH-MM.db`.
 
-Si algún día falla, el motivo queda en `~/respaldo-drive.log`. Para cambiar la carpeta o los días: variables `DRIVE_DESTINO` y `DRIVE_DIAS` en la línea de `crontab -e`.
+Si algún día falla, el motivo queda en `~/respaldo-drive.log`. Para cambiar los días que se conservan: `DRIVE_DIAS=60` antes del comando en `crontab -e`.
 
 ## 6. Actualizar
 ```bash
