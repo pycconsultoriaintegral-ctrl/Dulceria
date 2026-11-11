@@ -1,12 +1,12 @@
 // Importación masiva desde Excel (pegando las filas) o CSV, siempre con vista previa antes de aplicar.
 import { Router } from 'express';
-import { db, tx, HttpError, getStock, moverStock } from '../db.js';
-import { soloAdmin } from '../auth.js';
+import { db, tx, HttpError, getStock, moverStock, esConcepto } from '../db.js';
+import { requierePermiso } from '../auth.js';
 import { wrap } from '../util.js';
 import { leerObjetos, leerNumero, normalizar } from '../csv.js';
 import { aBase } from '../presentaciones.js';
 import { auditar } from '../auditoria.js';
-import { exigir, esAdminOBodeguero, puedeUb, puedeRuta, parseUb, getRuta, getBodega } from '../scope.js';
+import { exigir, can, puedeUb, puedeRuta, parseUb, getRuta, getBodega } from '../scope.js';
 
 const router = Router();
 const MAX_FILAS = 5000;
@@ -42,7 +42,7 @@ const ALIAS_PRODUCTO = {
   minimo: ['minimo', 'stock minimo', 'stock min', 'min', 'alerta', 'minimo bodega', 'minimo en bodega'],
   minimo_carro: ['minimo carro', 'minimo en carro', 'minimo en cada carro', 'minimo por carro', 'minimo ruta'],
 };
-router.post('/productos', soloAdmin, wrap((req, res) => {
+router.post('/productos', requierePermiso('productos'), wrap((req, res) => {
   const t = tabla(req, ALIAS_PRODUCTO, ['nombre']);
   const existentes = db.prepare('SELECT * FROM productos').all();
   const porCodigo = new Map(existentes.filter((p) => p.codigo).map((p) => [normalizar(p.codigo), p]));
@@ -51,6 +51,7 @@ router.post('/productos', soloAdmin, wrap((req, res) => {
   const filas = t.filas.map((r) => {
     const f = { linea: r._linea, nombre: r.nombre, accion: 'crear', cambios: [] };
     if (!r.nombre) { f.error = 'Falta el nombre'; return f; }
+    if (esConcepto(r.nombre)) { f.accion = 'omitir'; f.nota = 'Concepto contable, no es un producto'; return f; } // cuentas por cobrar, gastos bancarios…
     const clave = normalizar(r.codigo || r.nombre);
     if (vistos.has(clave)) { f.error = `Repetido en el archivo (ya está en la línea ${vistos.get(clave)})`; return f; }
     vistos.set(clave, r._linea);
@@ -95,7 +96,7 @@ const ALIAS_CLIENTE = {
   ruta: ['ruta'],
 };
 router.post('/clientes', wrap((req, res) => {
-  exigir(esAdminOBodeguero(req.user));
+  exigir(can(req.user, 'importar'));
   const t = tabla(req, ALIAS_CLIENTE, []);
   if (t.indice.nombre === undefined && t.indice.negocio === undefined) throw new HttpError(400, 'Falta la columna "nombre" (o "negocio") en la primera fila');
   const rutas = db.prepare('SELECT id, nombre FROM rutas').all();
@@ -161,7 +162,7 @@ const ALIAS_CONTEO = {
   presentacion: ['presentacion', 'en', 'medida'], // opcional: "estiba", "caja"… (la cantidad está en esa presentación)
 };
 router.post('/inventario', wrap((req, res) => {
-  exigir(esAdminOBodeguero(req.user));
+  exigir(can(req.user, 'importar'));
   const ub = req.body.ub;
   parseUb(ub);
   exigir(puedeUb(req.user, ub), 'No tienes permiso sobre esa ubicación');
@@ -219,7 +220,7 @@ const ALIAS_PRESENTACION = {
   factor: ['equivalencia', 'factor', 'unidades', 'contiene', 'trae', 'cantidad'],
   precio: ['precio', 'precio presentacion', 'precio venta', 'pvp'],
 };
-router.post('/presentaciones', soloAdmin, wrap((req, res) => {
+router.post('/presentaciones', requierePermiso('productos'), wrap((req, res) => {
   const t = tabla(req, ALIAS_PRESENTACION, ['presentacion', 'factor']);
   if (t.indice.producto === undefined && t.indice.codigo === undefined) throw new HttpError(400, 'Falta la columna "producto" (o "codigo") en la primera fila');
   const productos = db.prepare('SELECT id, codigo, nombre FROM productos').all();

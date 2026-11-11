@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { db, tx, ahora, HttpError, moverStock, getStock } from '../db.js';
 import { wrap, n, num, entero } from '../util.js';
 import { presentacionDe, aBase, presentacionesDe } from '../presentaciones.js';
-import { B, R, parseUb, getRuta, getBodega, nombreUb, exigir, esAdmin, esAdminOBodeguero, puedeBodega, puedeRuta, puedeUb } from '../scope.js';
+import { B, R, parseUb, getRuta, getBodega, nombreUb, exigir, can, puedeBodega, puedeRuta, puedeUb } from '../scope.js';
 
 const router = Router();
 
@@ -11,10 +11,10 @@ const router = Router();
 // ?ub=B1|R3 -> existencias de una ubicación;  ?ub=resumen -> totales por bodega y en rutas (admin/encargado)
 router.get('/inventario', wrap((req, res) => {
   const u = req.user;
-  const ub = req.query.ub || (u.rol === 'vendedor' ? R(u.ruta_id) : u.rol === 'bodeguero' ? B(u.bodega_id) : 'resumen');
-  const verCosto = esAdminOBodeguero(u);
+  const ub = req.query.ub || (u.alcance === 'ruta' ? R(u.ruta_id) : u.alcance === 'bodega' ? B(u.bodega_id) : 'resumen');
+  const verCosto = can(u, 'ver_costos');
   if (ub === 'resumen') {
-    exigir(esAdminOBodeguero(u));
+    exigir(can(u, 'inventario'));
     const bodegas = db.prepare('SELECT id, nombre FROM bodegas WHERE activa=1 ORDER BY nombre').all().filter((b) => puedeBodega(u, b.id));
     const idsB = new Set(bodegas.map((b) => b.id));
     const rutaBodega = new Map(db.prepare('SELECT id, bodega_id FROM rutas').all().map((r) => [r.id, r.bodega_id]));
@@ -28,7 +28,7 @@ router.get('/inventario', wrap((req, res) => {
       else if (tipo === 'R' && idsB.has(rutaBodega.get(id))) { f.en_rutas += s.cantidad; f.total += s.cantidad; }
     }
     const pres = presentacionesDe([...filas.keys()]);
-    return res.json({ ub: 'resumen', bodegas, productos: [...filas.values()].map((f) => { if (u.rol !== 'admin') delete f.costo; f.presentaciones = pres.get(f.id) ?? []; return f; }) });
+    return res.json({ ub: 'resumen', bodegas, productos: [...filas.values()].map((f) => { if (!verCosto) delete f.costo; f.presentaciones = pres.get(f.id) ?? []; return f; }) });
   }
   const p = parseUb(ub);
   exigir(puedeUb(u, ub), 'No tienes permiso sobre esa ubicación');
@@ -46,7 +46,7 @@ router.get('/inventario', wrap((req, res) => {
 // Cargue: de la bodega de la ruta -> ruta. Devolución: ruta -> su bodega.
 router.post('/inventario/cargue', wrap((req, res) => {
   const { ruta_id, sentido, items } = req.body;
-  exigir(esAdminOBodeguero(req.user));
+  exigir(can(req.user, 'inventario'));
   if (!['cargue', 'devolucion'].includes(sentido)) throw new HttpError(400, 'Sentido inválido');
   const ruta = getRuta(Number(ruta_id));
   if (!ruta) throw new HttpError(400, 'Ruta inválida');
@@ -69,7 +69,7 @@ router.post('/inventario/cargue', wrap((req, res) => {
 // ---------- Ajuste por conteo físico ----------
 router.post('/inventario/ajuste', wrap((req, res) => {
   const { producto_id, ub, cantidad_real, nota } = req.body;
-  exigir(esAdminOBodeguero(req.user));
+  exigir(can(req.user, 'inventario'));
   parseUb(ub);
   exigir(puedeUb(req.user, ub), 'No tienes permiso sobre esa ubicación');
   // la cantidad contada puede venir en una presentación (ej. 130 estibas); el inventario queda en unidades base
@@ -85,7 +85,7 @@ router.post('/inventario/ajuste', wrap((req, res) => {
 // ---------- Kardex ----------
 router.get('/inventario/kardex/:productoId', wrap((req, res) => {
   const u = req.user;
-  exigir(esAdminOBodeguero(u));
+  exigir(can(u, 'inventario'));
   const pid = entero(req.params.productoId);
   let filtro = '';
   const params = [pid];
@@ -94,7 +94,7 @@ router.get('/inventario/kardex/:productoId', wrap((req, res) => {
     exigir(puedeUb(u, req.query.ub), 'No tienes permiso sobre esa ubicación');
     filtro = 'AND m.ubicacion=?';
     params.push(req.query.ub);
-  } else if (u.rol === 'bodeguero') {
+  } else if (u.alcance === 'bodega') {
     // el encargado ve solo los movimientos de su bodega y de las rutas de su bodega
     const ubs = [B(u.bodega_id), ...db.prepare('SELECT id FROM rutas WHERE bodega_id=?').all(u.bodega_id).map((r) => R(r.id))];
     filtro = `AND m.ubicacion IN (${ubs.map(() => '?').join(',')})`;

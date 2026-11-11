@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { get, post, money, qty, useCarga, compartirRemision, abrirPdf, numRem, hoyStr, ir, useCola, descartarRechazada, useUbicaciones, conPrefijo } from '../lib.js';
+import { get, post, money, qty, useCarga, compartirRemision, abrirPdf, numRem, hoyStr, ir, useCola, descartarRechazada, useUbicaciones, conPrefijo, can } from '../lib.js';
 import { Header, Cargando, Vacio, toast, useAccion, Confirmar, SelectorPunto } from '../ui.jsx';
 import { Soportes } from '../soportes.jsx';
 import { imprimirRemision, preferencias } from '../impresora.js';
@@ -22,12 +22,12 @@ export function Remisiones({ user, cfg }) {
       <main>
         {pendientes.length > 0 && <div className="card"><b>{pendientes.length} venta(s)/abono(s) por enviar</b><div className="mut">Se envían solas al volver la conexión.</div>{pendientes.map((p) => <div key={p.uuid} className="mut">• {p.etiqueta}</div>)}</div>}
         {rechazadas.map((p) => <div key={p.uuid} className="card" style={{ borderColor: 'var(--mal)' }}><b className="mal">No se pudo registrar: {p.etiqueta}</b><div>{p.error}</div><button className="btn sm gris" onClick={() => descartarRechazada(p.uuid)}>Entendido</button></div>)}
-        {user.rol !== 'vendedor' && <SelectorPunto bodegas={bodegas} value={punto} onChange={setPunto} label="Punto" todos />}
+        {user.alcance !== 'ruta' && <SelectorPunto bodegas={bodegas} value={punto} onChange={setPunto} label="Punto" todos />}
         <div className="row" style={{ marginBottom: 10 }}><input type="date" className="q grow" style={{ margin: 0 }} value={fecha} onChange={(e) => setFecha(e.target.value)} /><div className="right"><div className="mut">Vendido</div><b>{money(total)}</b></div></div>
         {s.loading || s.error ? <Cargando s={s} /> : s.data.length === 0 ? <Vacio>Sin remisiones este día</Vacio> : (
           <div className="card list">{s.data.map((r) => (
             <div key={r.id} className="item" onClick={() => ir(`/remisiones/${r.id}`)}>
-              <div className="grow"><div className="bold">{numRem(cfg, r.consecutivo)} · {r.cliente}</div><div className="mut">{r.fecha.slice(11, 16)} · {r.vendedor}{user.rol !== 'vendedor' ? ` · ${r.ruta ? conPrefijo('Ruta', r.ruta) : 'Mostrador ' + r.bodega}` : ''}</div></div>
+              <div className="grow"><div className="bold">{numRem(cfg, r.consecutivo)} · {r.cliente}</div><div className="mut">{r.fecha.slice(11, 16)} · {r.vendedor}{user.alcance !== 'ruta' ? ` · ${r.ruta ? conPrefijo('Ruta', r.ruta) : 'Mostrador ' + r.bodega}` : ''}</div></div>
               <div className="right"><div className={'bold' + (r.anulada === 1 ? ' mal' : '')} style={r.anulada === 1 ? { textDecoration: 'line-through' } : {}}>{money(r.total)}</div>
                 <EtiquetaEstado r={r} /></div>
             </div>))}</div>
@@ -42,7 +42,7 @@ export function RemisionDetalle({ id, user, cfg }) {
   const [ocupado, run] = useAccion();
   const r = s.data;
   // aprueba el administrador o el encargado de la bodega del punto de venta, y nunca su propia venta (el administrador sí puede)
-  const aprueba = r && r.pendiente && (user.rol === 'admin' || (user.rol === 'bodeguero' && user.bodega_id === r.bodega_id && r.usuario_id !== user.id));
+  const aprueba = r && r.pendiente && can(user, 'aprobar_pagos') && (user.alcance === 'todo' || user.bodega_id === r.bodega_id) && (r.usuario_id !== user.id || user.rol === 'admin');
   const puedeCancelar = r && r.pendiente && !aprueba && r.usuario_id === user.id;
   return (
     <>
@@ -62,7 +62,7 @@ export function RemisionDetalle({ id, user, cfg }) {
             {r.requiere_aprobacion && r.anulada === 0 && <div className="aviso ok"><b>✅ Pago aprobado</b> por {r.aprobador} el {(r.fecha_aprobacion || '').slice(0, 16)}. Ya se puede entregar la mercancía.</div>}
             {r.rechazada && <div className="aviso mal"><b>Pago rechazado</b> por {r.aprobador}. No se entrega la mercancía.</div>}
             {(r.requiere_aprobacion || r.soportes.length > 0) && (
-              <Soportes remision={r} esAprobador={user.rol !== 'vendedor'} puedeAdjuntar={r.anulada !== 1} onCambio={s.recargar} />)}
+              <Soportes remision={r} esAprobador={can(user, 'aprobar_pagos')} puedeAdjuntar={r.anulada !== 1} onCambio={s.recargar} />)}
             {aprueba && (
               <div className="card">
                 <h3>Revisar el pago</h3>

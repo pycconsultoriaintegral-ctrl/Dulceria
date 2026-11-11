@@ -1,17 +1,17 @@
 import { Router } from 'express';
 import { db, HttpError, ahora } from '../db.js';
 import { wrap, r2, entero } from '../util.js';
-import { B, R, parseUb, exigir, esAdminOBodeguero, puedeBodega } from '../scope.js';
+import { B, R, parseUb, exigir, can, puedeBodega } from '../scope.js';
 
 const router = Router();
 
 // Resumen del negocio entre fechas. El administrador puede filtrar por bodega; el encargado ve siempre la suya.
 router.get('/resumen', wrap((req, res) => {
   const u = req.user;
-  exigir(esAdminOBodeguero(u));
+  exigir(can(u, 'informes'));
   const pedida = req.query.bodega_id ? entero(req.query.bodega_id) : null;
   if (pedida) exigir(puedeBodega(u, pedida), 'No tienes permiso sobre esa bodega');
-  const bodegaId = u.rol === 'bodeguero' ? u.bodega_id : pedida;
+  const bodegaId = u.alcance === 'bodega' ? u.bodega_id : pedida;
   const filtro = (a) => (bodegaId ? `${a}.bodega_id=${Number(bodegaId)}` : '1=1');
   const p = { desde: req.query.desde || ahora().slice(0, 8) + '01', hasta: req.query.hasta || ahora().slice(0, 10) };
   const rango = (a) => `substr(${a}.fecha,1,10) BETWEEN @desde AND @hasta`;
@@ -59,10 +59,12 @@ router.get('/resumen', wrap((req, res) => {
   }
   // Alerta de stock bajo: el mínimo del producto aplica a cada bodega
   const bajos = [];
+  // una bodega nueva (sin existencias ni movimientos de ese producto) no sale "agotada" de todo mientras cargan el inventario
+  const conMov = new Set(db.prepare("SELECT DISTINCT producto_id, ubicacion FROM movimientos WHERE ubicacion LIKE 'B%'").all().map((m) => `${m.ubicacion.slice(1)}:${m.producto_id}`));
   for (const b of bodegas) for (const [pid, pr] of prods) {
     if (pr.stock_minimo > 0) {
       const q = enBodega.get(`${b.id}:${pid}`) ?? 0;
-      if (q <= pr.stock_minimo) bajos.push({ id: pid, nombre: pr.nombre, bodega: b.nombre, bodega_id: b.id, stock_minimo: pr.stock_minimo, total: q });
+      if (q <= pr.stock_minimo && (q > 0 || conMov.has(`${b.id}:${pid}`))) bajos.push({ id: pid, nombre: pr.nombre, bodega: b.nombre, bodega_id: b.id, stock_minimo: pr.stock_minimo, total: q });
     }
   }
   bajos.sort((a, b) => a.total - b.total);

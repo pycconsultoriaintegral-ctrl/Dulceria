@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
-import { post, qty, useUbicaciones, esAdmin, conPrefijo } from '../lib.js';
+import { post, qty, useUbicaciones, can, conPrefijo } from '../lib.js';
 import { Header, Cargando, useAccion, toast } from '../ui.jsx';
 
 const TIPOS = {
   productos: {
     titulo: 'Productos', solo: 'admin',
-    ayuda: 'Columnas: nombre (obligatoria), código, unidad, precio, costo, mínimo bodega y mínimo carro. Si el producto ya existe (por código o nombre) se actualiza solo lo que traiga el archivo. Las demás columnas (por ejemplo, las cantidades) se ignoran.',
+    ayuda: 'Columnas: nombre (obligatoria), código, unidad, precio, costo, mínimo bodega y mínimo carro. Si el producto ya existe (por código o nombre) se actualiza solo lo que traiga el archivo: así editas todo de una vez (en Productos → «Excel para editar» descargas el catálogo actual). Los conceptos contables (cuentas por cobrar, gastos bancarios…) se omiten. Las demás columnas (por ejemplo, las cantidades) se ignoran.',
     plantilla: 'nombre;codigo;unidad;precio;costo;minimo\nJULYPAN GRANDE;JP1;und;1500;1000;20\nESTIBA JULYPAN;JP-E;estiba;300000;200000;2\n',
   },
   presentaciones: {
@@ -31,16 +31,16 @@ async function leerArchivo(file) {
   try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return new TextDecoder('windows-1252').decode(buf); }
 }
 
-const ETIQUETA = { crear: ['Nuevo', 'ok'], actualizar: ['Actualiza', ''], ajustar: ['Ajusta', ''], sin_cambios: ['Sin cambios', ''], sin_contar: ['No contado', ''] };
+const ETIQUETA = { crear: ['Nuevo', 'ok'], actualizar: ['Actualiza', ''], ajustar: ['Ajusta', ''], sin_cambios: ['Sin cambios', ''], sin_contar: ['No contado', ''], omitir: ['Se omite', ''] };
 // títulos de la primera fila pegada (Excel separa con tabulador; un CSV, con ; o ,)
 const titulosDe = (texto) => { const l = String(texto).split(/\r?\n/)[0] || ''; const sep = l.includes('\t') ? '\t' : l.includes(';') ? ';' : ','; return l.split(sep).map((x) => x.trim().replace(/^"|"$/g, '')).filter(Boolean); };
 
 export function Importar({ user }) {
   const { bodegas } = useUbicaciones();
-  const tipos = Object.entries(TIPOS).filter(([, t]) => t.solo !== 'admin' || esAdmin(user));
+  const tipos = Object.entries(TIPOS).filter(([, t]) => t.solo !== 'admin' || can(user, 'productos'));
   const [tipo, setTipo] = useState(tipos[0][0]);
   const [texto, setTexto] = useState('');
-  const [ub, setUb] = useState(user.rol === 'bodeguero' ? `B${user.bodega_id}` : '');
+  const [ub, setUb] = useState(user.alcance === 'bodega' ? `B${user.bodega_id}` : '');
   const [res, setRes] = useState(null);
   const [columna, setColumna] = useState(''); // columna de la cantidad (vacío = automática)
   const [ocupado, run] = useAccion();
@@ -112,6 +112,7 @@ export function Importar({ user }) {
               {res.resumen.actualizar > 0 && <span className="tag">{res.resumen.actualizar} se actualizan</span>}
               {res.resumen.ajustar > 0 && <span className="tag">{res.resumen.ajustar} se ajustan</span>}
               {res.resumen.sin_cambios > 0 && <span className="tag">{res.resumen.sin_cambios} sin cambios</span>}
+              {res.resumen.omitir > 0 && <span className="tag">{res.resumen.omitir} no son productos (se omiten)</span>}
               {res.resumen.sin_contar > 0 && <span className="tag">{res.resumen.sin_contar} sin contar</span>}
               {res.columna && <span className="mut">Cantidades de la columna «{res.columna}»</span>}
               {res.resumen.errores > 0 && <span className="tag mal">{res.resumen.errores} con error</span>}
@@ -123,6 +124,7 @@ export function Importar({ user }) {
                     <div className="bold">{f.nombre || f.producto || '(sin nombre)'}{f.presentacion ? ` · ${f.presentacion}` : ''}{f.negocio ? ` · ${f.negocio}` : ''}</div>
                     {f.error ? <div className="mal">Línea {f.linea}: {f.error}</div>
                       : f.diferencia !== undefined ? <div className="mut">Sistema {qty(f.actual)} → conteo {qty(f.conteo)} ({f.diferencia > 0 ? '+' : ''}{qty(f.diferencia)})</div>
+                      : f.nota ? <div className="mut">{f.nota}</div>
                       : f.cambios?.length ? <div className="mut">{f.cambios.join(' · ')}</div> : null}
                   </div>
                   {!f.error && <span className={'tag ' + ETIQUETA[f.accion][1]}>{ETIQUETA[f.accion][0]}</span>}

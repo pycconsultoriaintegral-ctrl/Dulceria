@@ -3,7 +3,7 @@
 import { Router } from 'express';
 import { db, hoy, HttpError, getConfig } from '../db.js';
 import { wrap, r2, conPrefijo } from '../util.js';
-import { sqlAlcance, exigir, esAdminOBodeguero, parseUb, getRuta, getBodega } from '../scope.js';
+import { sqlAlcance, exigir, can, parseUb, getRuta, getBodega } from '../scope.js';
 import { libro, MIME_XLSX } from '../xlsx.js';
 import { alertasInventario } from '../alertas.js';
 
@@ -28,12 +28,12 @@ export function periodos(q = {}) {
 }
 
 function contexto(req) {
-  exigir(esAdminOBodeguero(req.user), 'Los informes los descargan el encargado de la bodega o el administrador');
+  exigir(can(req.user, 'informes'), 'No tienes permiso para los informes');
   const q = req.query;
   const per = periodos(q);
   const alcance = (a) => sqlAlcance(req.user, a, { punto: q.punto, bodega_id: q.bodega_id });
   alcance('r'); // valida permisos del filtro antes de consultar
-  let ambito = req.user.rol === 'bodeguero' ? conPrefijo('Bodega', getBodega(req.user.bodega_id)?.nombre) : 'Todas las bodegas';
+  let ambito = req.user.alcance === 'bodega' ? conPrefijo('Bodega', getBodega(req.user.bodega_id)?.nombre) : 'Todas las bodegas';
   if (q.bodega_id) ambito = conPrefijo('Bodega', getBodega(Number(q.bodega_id))?.nombre);
   if (q.punto) { const p = parseUb(q.punto); ambito = p.tipo === 'R' ? conPrefijo('Ruta', getRuta(p.id)?.nombre) : `Mostrador ${getBodega(p.id)?.nombre}`; }
   const subtitulo = `${getConfig().negocio} · ${dmy(per.desde)} a ${dmy(per.hasta)} (${per.dias} días) · ${ambito} · comparado con ${dmy(per.antes.desde)} a ${dmy(per.antes.hasta)}`;
@@ -52,6 +52,18 @@ const sumaCol = (filas, i) => filas.reduce((a, f) => a + (Number(f[i]) || 0), 0)
 const cociente = (a, b) => (b ? r2(a / b * 10000) / 10000 : null);
 
 // ---------- Vendedores ----------
+// Catálogo para editar en Excel y volver a importar (Más → Importar → Productos): se actualiza lo que cambie, por código o nombre
+router.get('/informes/catalogo.xlsx', wrap((req, res) => {
+  exigir(can(req.user, 'productos'), 'No tienes permiso para editar productos');
+  const filas = db.prepare('SELECT nombre, codigo, unidad, precio, costo, stock_minimo, minimo_carro FROM productos WHERE activo=1 ORDER BY nombre').all();
+  res.setHeader('Content-Type', MIME_XLSX);
+  res.setHeader('Content-Disposition', 'attachment; filename="productos-para-editar.xlsx"');
+  res.send(libro([{ nombre: 'Productos',
+    columnas: [{ titulo: 'Producto', ancho: 38 }, { titulo: 'Código', ancho: 12 }, { titulo: 'Unidad', ancho: 9 }, { titulo: 'Precio', tipo: 'moneda', ancho: 12 },
+      { titulo: 'Costo', tipo: 'moneda', ancho: 12 }, { titulo: 'Mínimo bodega', tipo: 'entero', ancho: 13 }, { titulo: 'Mínimo carro', tipo: 'entero', ancho: 13 }],
+    filas: filas.map((p) => [p.nombre, p.codigo || '', p.unidad, p.precio, p.costo, p.stock_minimo || null, p.minimo_carro || null]) }]));
+}));
+
 router.get('/informes/vendedores.xlsx', wrap((req, res) => {
   const { per, alcance, subtitulo } = contexto(req);
   const base = (p) => db.prepare(`SELECT r.usuario_id AS id, COUNT(*) AS remisiones, COUNT(DISTINCT r.cliente_id) AS clientes, SUM(r.total) AS ventas,
@@ -68,7 +80,7 @@ router.get('/informes/vendedores.xlsx', wrap((req, res) => {
   const cie = new Map(cierres.map((x) => [x.id, x]));
   const ids = [...new Set([...actual.keys(), ...antes.keys()])];
   const usuarios = new Map(db.prepare('SELECT id, nombre, rol FROM usuarios').all().map((x) => [x.id, x]));
-  const ROL = { admin: 'Administrador', bodeguero: 'Encargado', vendedor: 'Vendedor' };
+  const ROL = Object.fromEntries(db.prepare('SELECT clave, nombre FROM roles').all().map((x) => [x.clave, x.nombre]));
   const filas = ids.map((id) => {
     const a = actual.get(id) || { remisiones: 0, clientes: 0, ventas: 0, contado: 0, credito: 0, descuentos: 0, puntos: '' };
     const l = lin.get(id) || { costo: 0, bajo_lista: 0 };
@@ -103,7 +115,7 @@ router.get('/informes/productos.xlsx', wrap((req, res) => {
   let ubs = null;
   if (q.punto) ubs = [q.punto];
   else if (q.bodega_id) ubs = [`B${Number(q.bodega_id)}`, ...db.prepare('SELECT id FROM rutas WHERE bodega_id=?').all(Number(q.bodega_id)).map((x) => `R${x.id}`)];
-  else if (u.rol === 'bodeguero') ubs = [`B${u.bodega_id}`, ...db.prepare('SELECT id FROM rutas WHERE bodega_id=?').all(u.bodega_id).map((x) => `R${x.id}`)];
+  else if (u.alcance === 'bodega') ubs = [`B${u.bodega_id}`, ...db.prepare('SELECT id FROM rutas WHERE bodega_id=?').all(u.bodega_id).map((x) => `R${x.id}`)];
   const stock = new Map(db.prepare(`SELECT producto_id AS id, SUM(cantidad) AS q FROM stock ${ubs ? `WHERE ubicacion IN (${ubs.map(() => '?').join(',')})` : ''} GROUP BY producto_id`).all(...(ubs || [])).map((x) => [x.id, x.q]));
   const prods = db.prepare('SELECT id, codigo, nombre, unidad, activo FROM productos ORDER BY nombre').all().filter((p) => p.activo || act.has(p.id) || ant.has(p.id));
   const filas = prods.map((p) => {

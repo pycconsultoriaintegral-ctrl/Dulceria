@@ -9,7 +9,7 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 // Ubicaciones de inventario: 'B<id>' = bodega, 'R<id>' = inventario en la ruta.
 // Esquema v2: varias bodegas; cada ruta pertenece a una bodega.
-const VERSION_ESQUEMA = 8;
+const VERSION_ESQUEMA = 9;
 
 const DDL = {
   config: (t) => `CREATE TABLE ${t} (clave TEXT PRIMARY KEY, valor TEXT)`,
@@ -18,8 +18,11 @@ const DDL = {
     bodega_id INTEGER NOT NULL REFERENCES bodegas(id), activa INTEGER DEFAULT 1)`,
   usuarios: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, nombre TEXT NOT NULL, usuario TEXT NOT NULL UNIQUE, clave_hash TEXT NOT NULL,
-    rol TEXT NOT NULL CHECK (rol IN ('admin','bodeguero','vendedor')),
+    rol TEXT NOT NULL,
     ruta_id INTEGER REFERENCES rutas(id), bodega_id INTEGER REFERENCES bodegas(id), activo INTEGER DEFAULT 1)`,
+  // Roles configurables: alcance = hasta dónde ve (todo, su bodega o su ruta); permisos = lista JSON de funciones habilitadas
+  roles: (t) => `CREATE TABLE ${t} (clave TEXT PRIMARY KEY, nombre TEXT NOT NULL UNIQUE, alcance TEXT NOT NULL CHECK (alcance IN ('todo','bodega','ruta')),
+    permisos TEXT NOT NULL DEFAULT '[]', sistema INTEGER NOT NULL DEFAULT 0)`,
   productos: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, codigo TEXT, nombre TEXT NOT NULL, unidad TEXT DEFAULT 'und',
     precio REAL NOT NULL DEFAULT 0, costo REAL NOT NULL DEFAULT 0, stock_minimo REAL DEFAULT 0, activo INTEGER DEFAULT 1,
@@ -101,11 +104,44 @@ const DDL = {
     id INTEGER PRIMARY KEY, traslado_id INTEGER NOT NULL REFERENCES traslados(id),
     producto_id INTEGER NOT NULL REFERENCES productos(id), cantidad REAL NOT NULL, cantidad_recibida REAL)`,
 };
-const ORDEN = ['config', 'bodegas', 'rutas', 'usuarios', 'productos', 'presentaciones', 'stock', 'movimientos', 'proveedores', 'compras', 'compra_items',
+const ORDEN = ['config', 'bodegas', 'rutas', 'roles', 'usuarios', 'productos', 'presentaciones', 'stock', 'movimientos', 'proveedores', 'compras', 'compra_items',
   'clientes', 'remisiones', 'soportes', 'remision_items', 'pagos', 'gastos', 'cierres', 'cuadres', 'envios_whatsapp', 'traslados', 'traslado_items', 'auditoria'];
 const INDICES = ['CREATE INDEX IF NOT EXISTS ix_mov_prod ON movimientos(producto_id, fecha)',
   'CREATE INDEX IF NOT EXISTS ix_rem_fecha ON remisiones(fecha)', 'CREATE INDEX IF NOT EXISTS ix_pagos_fecha ON pagos(fecha)', 'CREATE INDEX IF NOT EXISTS ix_aud_fecha ON auditoria(fecha)',
   'CREATE INDEX IF NOT EXISTS ix_sop_rem ON soportes(remision_id)', 'CREATE INDEX IF NOT EXISTS ix_sop_huella ON soportes(huella)'];
+
+// Funciones que se pueden dar o quitar a cada rol
+export const PERMISOS = [
+  ['vender', 'Vender, cobrar y registrar gastos', 'Hacer remisiones, cobrar abonos y anotar gastos de su punto'],
+  ['anular_remisiones', 'Anular remisiones de otros', 'Anular remisiones de su alcance (quien vende siempre puede anular las suyas del día)'],
+  ['aprobar_pagos', 'Aprobar pagos anticipados', 'Aprobar o rechazar soportes de pago de clientes que pagan antes'],
+  ['inventario', 'Gestionar inventario', 'Cargar rutas, contar, ajustar y hacer traslados entre bodegas'],
+  ['compras', 'Registrar compras y proveedores', 'Entrada de mercancía con precio de compra'],
+  ['pagar_proveedores', 'Pagos a proveedores y anular compras', 'Registrar pagos a proveedores, anular compras y ver lo que se les debe'],
+  ['productos', 'Crear y editar productos', 'Catálogo: precios, mínimos, presentaciones, activar y desactivar'],
+  ['importar', 'Importar desde Excel', 'Carga masiva de clientes, inventario y conteos'],
+  ['ver_costos', 'Ver costos y márgenes', 'Costo de compra y utilidad de los productos'],
+  ['informes', 'Informes, reportes y alertas', 'Reportes, descargas en Excel y alertas de inventario'],
+  ['cuadre', 'Cuadre semanal y verificar transferencias', 'Cuadre del sábado y confirmación de transferencias en el banco'],
+  ['administrar', 'Administrar la app', 'Usuarios, roles, rutas, bodegas, datos del negocio, WhatsApp y registro de actividad'],
+];
+export const TODOS_LOS_PERMISOS = PERMISOS.map((p) => p[0]);
+const DEFAULT_ROLES = [
+  ['admin', 'Administrador', 'todo', TODOS_LOS_PERMISOS, 1],
+  ['bodeguero', 'Encargado de bodega', 'bodega', ['vender', 'anular_remisiones', 'aprobar_pagos', 'inventario', 'compras', 'importar', 'ver_costos', 'informes', 'cuadre'], 1],
+  ['vendedor', 'Vendedor de ruta', 'ruta', ['vender'], 1],
+  ['auxiliar', 'Auxiliar de bodega', 'bodega', ['vender', 'inventario'], 0],
+  ['contador', 'Contador / cartera', 'todo', ['ver_costos', 'informes', 'cuadre', 'pagar_proveedores'], 0],
+  ['supervisor', 'Supervisor de rutas', 'todo', ['vender', 'anular_remisiones', 'aprobar_pagos', 'informes', 'cuadre'], 0],
+];
+export function sembrarRoles() {
+  const ins = db.prepare('INSERT OR IGNORE INTO roles (clave,nombre,alcance,permisos,sistema) VALUES (?,?,?,?,?)');
+  for (const [c, nombre, alcance, permisos, sistema] of DEFAULT_ROLES) ins.run(c, nombre, alcance, JSON.stringify(permisos), sistema);
+}
+
+// Conceptos contables de Pluma7 que se colaron en la lista de productos: no se venden ni se cuentan
+const CONCEPTOS = ['traslado entre bancos', 'gastos bancarios', 'ingreso libre', 'aporte de socios', 'gastos', 'gastós'];
+export const esConcepto = (nombre) => { const x = String(nombre).trim().toLowerCase().replace(/\s+/g, ' '); return CONCEPTOS.includes(x) || /^(cuentas por|abonos a facturas|anticipo de)/.test(x); };
 
 const existe = (t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(t);
 
@@ -189,12 +225,39 @@ const MIGRACIONES = {
   },
   // v8: mínimo de inventario en cada carro (para las alertas de inventario)
   8: () => agregarColumna('productos', 'minimo_carro', 'REAL NOT NULL DEFAULT 0'),
+  // v9: roles y permisos configurables (usuarios.rol deja de estar limitado a 3 valores) y conceptos contables fuera del catálogo
+  9: () => {
+    sembrarRoles(); // (la tabla usuarios sin límite de roles se reconstruye antes, en quitarLimiteDeRoles)
+    // los conceptos contables de la lista de Pluma7 (cuentas por cobrar, gastos bancarios…) no son productos: se desactivan si no tienen historial
+    for (const p of db.prepare('SELECT id, nombre FROM productos WHERE activo=1').all()) {
+      if (esConcepto(p.nombre) && !db.prepare('SELECT 1 FROM movimientos WHERE producto_id=?').get(p.id) && !db.prepare('SELECT 1 FROM remision_items WHERE producto_id=?').get(p.id))
+        db.prepare('UPDATE productos SET activo=0 WHERE id=?').run(p.id);
+    }
+  },
 };
+
+// v9: usuarios.rol ya no se limita a admin/bodeguero/vendedor. SQLite no permite quitar un CHECK: se reconstruye la tabla
+// (con las claves foráneas apagadas, lo que no se puede dentro de otra transacción).
+function quitarLimiteDeRoles() {
+  const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='usuarios'").get()?.sql || '';
+  if (!/CHECK\s*\(\s*rol\s+IN/i.test(sql)) return;
+  db.exec('PRAGMA foreign_keys = OFF');
+  db.exec('BEGIN');
+  try {
+    db.exec(DDL.usuarios('usuarios_n'));
+    db.exec('INSERT INTO usuarios_n (id,nombre,usuario,clave_hash,rol,ruta_id,bodega_id,activo) SELECT id,nombre,usuario,clave_hash,rol,ruta_id,bodega_id,activo FROM usuarios');
+    db.exec('DROP TABLE usuarios');
+    db.exec('ALTER TABLE usuarios_n RENAME TO usuarios');
+    if (db.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Migración inválida: referencias rotas');
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; } finally { db.exec('PRAGMA foreign_keys = ON'); }
+}
 
 function aplicarMigraciones() {
   let version = db.prepare('PRAGMA user_version').get().user_version;
   while (version < VERSION_ESQUEMA) {
     version += 1;
+    if (version === 9) quitarLimiteDeRoles();
     db.exec('BEGIN');
     try {
       MIGRACIONES[version]?.();
@@ -206,20 +269,23 @@ function aplicarMigraciones() {
 
 (function iniciarEsquema() {
   const version = db.prepare('PRAGMA user_version').get().user_version;
-  if (version >= VERSION_ESQUEMA) { crearEsquema(); return; }
+  if (version >= VERSION_ESQUEMA) { crearEsquema(); sembrarRoles(); return; }
   if (existe('rutas') && !db.prepare("SELECT 1 FROM pragma_table_info('rutas') WHERE name='bodega_id'").get()) {
     migrarDeV1();
     aplicarMigraciones();
+    sembrarRoles();
     return;
   }
   if (!existe('rutas')) { // base nueva: se crea directamente con el esquema actual
     crearEsquema();
     if (!db.prepare('SELECT 1 FROM bodegas').get()) db.exec("INSERT INTO bodegas (id, nombre) VALUES (1, 'Bodega principal')");
     db.exec(`PRAGMA user_version = ${VERSION_ESQUEMA}`);
+    sembrarRoles();
     return;
   }
   crearEsquema();
   aplicarMigraciones();
+  sembrarRoles();
 })();
 
 export const now = () => new Date().toISOString();
@@ -254,6 +320,15 @@ export function moverStock({ productoId, ubicacion, delta, tipo, costo = 0, refe
   db.prepare(`INSERT INTO movimientos (fecha, producto_id, ubicacion, tipo, cantidad, costo, referencia, usuario_id, nota)
     VALUES (?,?,?,?,?,?,?,?,?)`).run(now(), productoId, ubicacion, tipo, delta, costo, referencia, usuarioId, nota);
 }
+
+// Vender sin existencias registradas: por defecto solo mientras aún no se ha cargado inventario (modo "carga inicial");
+// después se exige inventario. El administrador puede fijarlo siempre en sí ('1') o no ('0') desde Ajustes.
+export const permiteSinStock = () => {
+  const v = db.prepare("SELECT valor FROM config WHERE clave='permitir_sin_stock'").get()?.valor;
+  if (v === '1') return true;
+  if (v === '0') return false;
+  return !db.prepare('SELECT 1 FROM movimientos WHERE cantidad>0 LIMIT 1').get();
+};
 
 export function getConfig() {
   const o = { negocio: 'Panificadora Mi Pan Colombia SAS', nit: '', telefono: '', direccion: '', pie_remision: 'Gracias por su compra. Documento sin validez tributaria (remisión).', prefijo: 'R' };

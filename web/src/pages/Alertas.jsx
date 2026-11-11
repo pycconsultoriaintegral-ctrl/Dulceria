@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { get, money, qty, useCarga, descargar, hoyStr, puedeGestionar } from '../lib.js';
+import { get, money, qty, useCarga, descargar, hoyStr, can } from '../lib.js';
 import { Header, Cargando, Vacio, useAccion } from '../ui.jsx';
 
 // Alertas de inventario: lo que hay que reponer y lo que no se está moviendo, agrupado por bodega y carro
@@ -44,7 +44,7 @@ export function Alertas({ user }) {
             <div className="mut" style={{ margin: '4px 0 12px' }}>
               Los mínimos se ponen en cada producto (mínimo en bodega y mínimo en cada carro). Los días sin movimiento se cambian en Ajustes.
             </div>
-            {puedeGestionar(user) && <button className="btn sec block" disabled={ocupado} onClick={() => run(() => descargar(`/informes/productos.xlsx?desde=${hoyStr().slice(0, 8)}01&hasta=${hoyStr()}`, `inventario-y-alertas-${hoyStr()}.xlsx`), 'Descargado')}>⬇ Descargar en Excel</button>}
+            {can(user, 'informes') && <button className="btn sec block" disabled={ocupado} onClick={() => run(() => descargar(`/informes/productos.xlsx?desde=${hoyStr().slice(0, 8)}01&hasta=${hoyStr()}`, `inventario-y-alertas-${hoyStr()}.xlsx`), 'Descargado')}>⬇ Descargar en Excel</button>}
           </>
         )}
       </main>

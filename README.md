@@ -34,13 +34,14 @@ App web móvil (PWA) para controlar **compras, inventario y ventas por ruta** de
 - Encabezados de seguridad (política de contenido, sin incrustación en otros sitios), datos de la API sin caché y CSV protegidos contra inyección de fórmulas.
 - Las pruebas automáticas (`npm test`) corren también en GitHub en cada cambio.
 
-### Roles
+### Roles y permisos (configurables)
 
-| Rol | Qué ve y hace |
-| --- | --- |
-| **Administrador** | Todo: bodegas, rutas, usuarios, productos, compras de cualquier bodega, traslados, reportes y ajustes. |
-| **Encargado de bodega** | Solo su bodega y las rutas que despacha: inventario, compras, cargue/devolución, ajustes de conteo, ventas de mostrador, enviar/recibir traslados, cartera, cierres y reportes de su bodega. No ve costos de otras bodegas. |
-| **Vendedor de ruta** | Solo su ruta: vender, cobrar, clientes, cartera y cierre de su ruta. No ve costos. |
+Cada usuario tiene un **rol**, y el administrador puede crear los que necesite en *Más → Ajustes → Roles y permisos*. Un rol define:
+
+- **Hasta dónde ve**: todas las bodegas y rutas, solo su bodega (y las rutas que despacha) o solo su ruta.
+- **Qué funciones usa** (se activan o quitan una por una): vender y cobrar, anular remisiones, aprobar pagos anticipados, inventario y traslados, compras, pagos a proveedores, editar productos, importar, ver costos, informes, cuadre semanal y administrar la app.
+
+Vienen listos: **Administrador** (siempre todo, no se modifica), **Encargado de bodega**, **Vendedor de ruta**, **Auxiliar de bodega**, **Contador / cartera** y **Supervisor de rutas**. Los cambios aplican al instante, sin que el usuario tenga que volver a entrar, y todo se valida en el servidor.
 
 Los **traslados entre bodegas** funcionan en dos pasos: al enviar, la mercancía sale de la bodega de origen y queda *en camino*; la bodega de destino cuenta lo que llegó y confirma. Si llega menos, el faltante queda registrado.
 

@@ -1,20 +1,20 @@
 // Compras a proveedores: cada compra llega a una bodega
 import { Router } from 'express';
 import { db, tx, ahora, HttpError, moverStock } from '../db.js';
-import { soloAdmin } from '../auth.js';
+import { requierePermiso } from '../auth.js';
 import { wrap, n, num, r2, entero } from '../util.js';
 import { presentacionDe, aBase } from '../presentaciones.js';
 import { auditar } from '../auditoria.js';
-import { B, esAdmin, esAdminOBodeguero, puedeBodega, exigir, getBodega } from '../scope.js';
+import { B, can, puedeBodega, exigir, getBodega } from '../scope.js';
 
 const router = Router();
-router.use((req, _res, next) => (esAdminOBodeguero(req.user) ? next() : next(new HttpError(403, 'No tienes permiso para esto'))));
+router.use((req, _res, next) => (can(req.user, 'compras') || can(req.user, 'pagar_proveedores') ? next() : next(new HttpError(403, 'No tienes permiso para esto'))));
 
 // Solo ve las compras de su alcance: todas (admin) o las de su bodega (encargado)
-const alcance = (u) => (u.rol === 'admin' ? '1=1' : `c.bodega_id=${Number(u.bodega_id)}`);
+const alcance = (u) => (u.alcance === 'todo' ? '1=1' : `c.bodega_id=${Number(u.bodega_id)}`);
 
 router.get('/', (req, res) => {
-  const filtroBodega = esAdmin(req.user) && req.query.bodega_id ? `AND c.bodega_id=${Number(req.query.bodega_id)}` : '';
+  const filtroBodega = req.user.alcance === 'todo' && req.query.bodega_id ? `AND c.bodega_id=${Number(req.query.bodega_id)}` : '';
   res.json(db.prepare(`SELECT c.*, pr.nombre AS proveedor, b.nombre AS bodega FROM compras c
     LEFT JOIN proveedores pr ON pr.id=c.proveedor_id JOIN bodegas b ON b.id=c.bodega_id
     WHERE substr(c.fecha,1,10) BETWEEN ? AND ? AND ${alcance(req.user)} ${filtroBodega} ORDER BY c.id DESC LIMIT 300`)
@@ -33,7 +33,7 @@ router.post('/', wrap((req, res) => {
   const b = req.body;
   if (!Array.isArray(b.items) || !b.items.length) throw new HttpError(400, 'Agrega al menos un producto');
   // el encargado compra siempre para su bodega; el administrador elige
-  const bodegaId = req.user.rol === 'bodeguero' ? req.user.bodega_id : entero(b.bodega_id, 'Elige la bodega que recibe la compra');
+  const bodegaId = req.user.alcance === 'bodega' ? req.user.bodega_id : entero(b.bodega_id, 'Elige la bodega que recibe la compra');
   exigir(puedeBodega(req.user, bodegaId));
   if (!getBodega(bodegaId)) throw new HttpError(400, 'La bodega no existe');
   const id = tx(() => {
@@ -68,7 +68,7 @@ router.post('/', wrap((req, res) => {
   res.json({ id });
 }));
 
-router.post('/:id/anular', soloAdmin, wrap((req, res) => {
+router.post('/:id/anular', requierePermiso('pagar_proveedores'), wrap((req, res) => {
   tx(() => {
     const c = db.prepare('SELECT * FROM compras WHERE id=?').get(entero(req.params.id));
     if (!c) throw new HttpError(404, 'Compra no encontrada');
@@ -81,7 +81,7 @@ router.post('/:id/anular', soloAdmin, wrap((req, res) => {
   res.json({ ok: true });
 }));
 
-router.post('/:id/pago', soloAdmin, wrap((req, res) => {
+router.post('/:id/pago', requierePermiso('pagar_proveedores'), wrap((req, res) => {
   const c = db.prepare('SELECT * FROM compras WHERE id=? AND anulada=0').get(entero(req.params.id));
   if (!c) throw new HttpError(404, 'Compra no encontrada');
   const v = num(req.body.valor);

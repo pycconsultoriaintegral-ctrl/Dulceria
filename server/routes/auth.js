@@ -22,8 +22,7 @@ publico.post('/auth/login', wrap((req, res) => {
     throw new HttpError(401, 'Usuario o contraseña incorrectos');
   }
   porUsuario.exito(claveU);
-  const { id, nombre, usuario, rol, ruta_id, bodega_id } = cargarUsuario(u.id);
-  res.json({ token: firmar(u), user: { id, nombre, usuario, rol, ruta_id, bodega_id } });
+  res.json({ token: firmar(u), user: cargarUsuario(u.id) });
 }));
 // Para el monitoreo: responde solo si la base de datos contesta
 publico.get('/health', (_req, res) => {

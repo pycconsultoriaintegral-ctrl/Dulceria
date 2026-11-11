@@ -6,9 +6,10 @@ import { imprimirRemision, preferencias } from '../impresora.js';
 import { ahoraLocal } from '../tirilla.js';
 
 export default function Vender({ user, cfg }) {
-  const elige = user.rol !== 'vendedor'; // el vendedor siempre vende de su ruta; los demás eligen el punto de venta
+  const libre = !!cfg?.sin_stock_ok; // carga inicial: se puede vender aunque aún no haya inventario registrado
+  const elige = user.alcance !== 'ruta'; // el vendedor siempre vende de su ruta; los demás eligen el punto de venta
   const { bodegas } = useUbicaciones();
-  const [punto, setPunto] = useState(user.rol === 'bodeguero' ? `B${user.bodega_id}` : '');
+  const [punto, setPunto] = useState(user.alcance === 'bodega' ? `B${user.bodega_id}` : '');
   const prods = useCarga(() => (elige && !punto ? [] : get(`/productos?punto=${punto}`)), [punto]);
   const clientes = useCarga(() => get('/clientes'), []);
   const [cliente, setCliente] = useState(null);
@@ -38,13 +39,13 @@ export default function Vender({ user, cfg }) {
   // cada línea lleva su presentación (unidad, caja, estiba…), la cantidad y el precio en esa presentación
   const setCant = (p, c) => setItems((it) => ({ ...it, [p.id]: { pres: it[p.id]?.pres ?? null, precio: it[p.id]?.precio ?? listaDe(p, it[p.id]?.pres), cantidad: c } }));
   const setPrecio = (p, v) => setItems((it) => ({ ...it, [p.id]: { pres: it[p.id]?.pres ?? null, cantidad: it[p.id]?.cantidad ?? 0, precio: Number(v) || 0 } }));
-  const setPres = (p, pres) => setItems((it) => ({ ...it, [p.id]: { pres, precio: listaDe(p, pres), cantidad: Math.min(it[p.id]?.cantidad ?? 0, Math.floor(p.stock_punto / factorDe(p, pres))) } }));
+  const setPres = (p, pres) => setItems((it) => ({ ...it, [p.id]: { pres, precio: listaDe(p, pres), cantidad: libre ? (it[p.id]?.cantidad ?? 0) : Math.min(it[p.id]?.cantidad ?? 0, Math.floor(p.stock_punto / factorDe(p, pres))) } }));
 
   const confirmar = () => run(async () => {
     if (elige && !punto) throw new Error('Elige el punto de venta');
     if (!cliente) throw new Error('Elige el cliente');
     if (!sel.length) throw new Error('Agrega al menos un producto');
-    const sinStock = sel.find((p) => items[p.id].cantidad * factorDe(p, items[p.id].pres) > p.stock_punto);
+    const sinStock = !libre && sel.find((p) => items[p.id].cantidad * factorDe(p, items[p.id].pres) > p.stock_punto);
     if (sinStock) throw new Error(`Solo hay ${qty(sinStock.stock_ruta)} de "${sinStock.nombre}" en la ruta`);
     if (!anticipado && tipo === 'credito' && (Number(abono) || 0) > total) throw new Error('El abono no puede superar el total');
     const payload = {
@@ -102,8 +103,8 @@ export default function Vender({ user, cfg }) {
                 const it = items[p.id];
                 const pres = it?.pres ?? null;
                 const factor = factorDe(p, pres);
-                const max = Math.floor(p.stock_punto / factor);
-                const agotado = p.stock_punto <= 0;
+                const max = libre ? 100000 : Math.floor(p.stock_punto / factor);
+                const agotado = !libre && p.stock_punto <= 0;
                 return (
                   <div key={p.id} className="item" style={{ cursor: 'default', opacity: agotado ? 0.5 : 1, flexWrap: 'wrap' }}>
                     <div className="grow" style={p.presentaciones?.length ? { flexBasis: '100%' } : undefined}>
@@ -217,8 +218,8 @@ export function NuevoCliente({ onClose, onCreado, user, bodegas = [] }) {
       <Campo label="Negocio" value={f.negocio} onChange={set('negocio')} />
       <Campo label="Teléfono / WhatsApp" inputMode="tel" value={f.telefono} onChange={set('telefono')} />
       <Campo label="Dirección" value={f.direccion} onChange={set('direccion')} />
-      {user?.rol !== 'vendedor' && <SelectorPunto bodegas={bodegas} value={f.ruta_id ? `R${f.ruta_id}` : ''} onChange={(v) => setF({ ...f, ruta_id: v.startsWith('R') ? v.slice(1) : '' })} label="Ruta del cliente (opcional)" mostrador={false} vacio="Sin ruta" />}
-      {user?.rol !== 'vendedor' && <label className="row" style={{ gap: 8, margin: '4px 0 12px' }}><input type="checkbox" checked={f.paga_antes} onChange={(e) => setF({ ...f, paga_antes: e.target.checked })} /><span>Paga antes de recibir (exige soporte de pago aprobado)</span></label>}
+      {user?.alcance !== 'ruta' && <SelectorPunto bodegas={bodegas} value={f.ruta_id ? `R${f.ruta_id}` : ''} onChange={(v) => setF({ ...f, ruta_id: v.startsWith('R') ? v.slice(1) : '' })} label="Ruta del cliente (opcional)" mostrador={false} vacio="Sin ruta" />}
+      {user?.alcance !== 'ruta' && <label className="row" style={{ gap: 8, margin: '4px 0 12px' }}><input type="checkbox" checked={f.paga_antes} onChange={(e) => setF({ ...f, paga_antes: e.target.checked })} /><span>Paga antes de recibir (exige soporte de pago aprobado)</span></label>}
       <button className="btn block" disabled={ocupado} onClick={() => run(async () => { const r = await post('/clientes', f); toast('Cliente creado'); onCreado(r.id); })}>Guardar</button>
     </Modal>
   );

@@ -1,10 +1,10 @@
-import { get, money, useCarga, ir, numRem, conPrefijo } from '../lib.js';
+import { get, money, useCarga, ir, numRem, conPrefijo, can } from '../lib.js';
 import { Header, Cargando, Vacio } from '../ui.jsx';
 
 // Remisiones de clientes que pagan antes y esperan que se apruebe el soporte de pago
 export function Aprobaciones({ user, cfg }) {
   const s = useCarga(() => get('/aprobaciones'), []);
-  const aprueba = user.rol !== 'vendedor';
+  const aprueba = can(user, 'aprobar_pagos');
   return (
     <>
       <Header titulo={aprueba ? 'Pagos por aprobar' : 'Mis pendientes de pago'} atras="/" />

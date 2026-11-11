@@ -53,6 +53,7 @@ export async function get(url) {
 }
 export const post = (u, b) => raw('POST', u, b ?? {});
 export const put = (u, b) => raw('PUT', u, b ?? {});
+export const del = (u) => raw('DELETE', u);
 export const login = (usuario, clave) => raw('POST', '/auth/login', { usuario, clave }, { noAuthRedirect: true });
 export const blob = (u) => raw('GET', u, undefined, { blob: true });
 
@@ -150,10 +151,11 @@ export async function descargarPdf(r, cfg, formato = 'ticket') {
 }
 
 // ---------- Bodegas y puntos de venta ----------
-export const esAdmin = (u) => u?.rol === 'admin';
-export const esEncargado = (u) => u?.rol === 'bodeguero';
-export const puedeGestionar = (u) => u?.rol === 'admin' || u?.rol === 'bodeguero'; // inventario, compras, traslados
-export const ROL_NOMBRE = { admin: 'Administrador', bodeguero: 'Encargado de bodega', vendedor: 'Vendedor de ruta' };
+// El rol de cada usuario define su alcance (todo / su bodega / su ruta) y sus permisos (qué funciones usa); los configura el administrador en Ajustes
+export const can = (u, permiso) => !!u?.permisos?.includes(permiso);
+export const esAdmin = (u) => u?.alcance === 'todo'; // ve todas las bodegas
+export const esEncargado = (u) => u?.alcance === 'bodega';
+export const puedeGestionar = (u) => can(u, 'inventario') || can(u, 'compras');
 
 // Bodegas (con sus rutas) que el usuario puede ver; sirve para todos los selectores
 export function useUbicaciones() {

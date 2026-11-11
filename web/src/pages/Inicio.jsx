@@ -1,8 +1,8 @@
-import { get, money, qty, useCarga, ir, hoyStr, puedeGestionar } from '../lib.js';
+import { get, money, qty, useCarga, ir, hoyStr, can } from '../lib.js';
 import { Header, Cargando } from '../ui.jsx';
 
 export function Inicio({ user, cfg }) {
-  const admin = puedeGestionar(user); // administrador y encargado de bodega ven el resumen de su alcance
+  const admin = can(user, 'informes'); // quien tiene informes ve el resumen de su alcance
   const s = useCarga(() => (admin ? get(`/reportes/resumen?desde=${hoyStr()}&hasta=${hoyStr()}`) : get(`/cierre?fecha=${hoyStr()}`)), []);
   const d = s.data;
   // remisiones de clientes que pagan antes y esperan aprobación (si no hay señal, simplemente no se muestra)

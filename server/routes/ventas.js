@@ -1,9 +1,10 @@
 // Remisiones (ventas), abonos, cartera, gastos y cierre diario. El "punto" es una ruta ('R3') o el mostrador de una bodega ('B1').
 import { Router } from 'express';
-import { db, tx, ahora, HttpError, moverStock, getStock, getConfig } from '../db.js';
+import { db, tx, ahora, HttpError, moverStock, getStock, getConfig, permiteSinStock } from '../db.js';
+import { requierePermiso } from '../auth.js';
 import { remisionPdf, remisionTicket } from '../pdf.js';
 import { wrap, n, num, r2, req_, entero, conPrefijo } from '../util.js';
-import { B, R, getRuta, resolverPunto, sqlAlcance, sqlPunto, exigir, puedeRuta, puedeBodega, puedeUb, parseUb } from '../scope.js';
+import { B, R, getRuta, resolverPunto, sqlAlcance, sqlPunto, exigir, can, puedeRuta, puedeBodega, puedeUb, parseUb } from '../scope.js';
 import { puedeVerCliente } from './clientes.js';
 import { presentacionDe, aBase, precioLista } from '../presentaciones.js';
 import { auditar } from '../auditoria.js';
@@ -16,6 +17,7 @@ export const ubDelPunto = (p) => (p.ruta_id ? R(p.ruta_id) : B(p.bodega_id));
 
 // Comprueba que hay inventario para todas las líneas sin moverlo (las ventas pendientes de aprobación solo lo descuentan al aprobarse)
 function verificarStock(items, ub) {
+  if (permiteSinStock()) return; // mientras cargan el inventario se puede vender aunque aún no figure
   const necesario = new Map();
   for (const i of items) necesario.set(i.p.id, (necesario.get(i.p.id) ?? 0) + aBase(i.cantidad, i.pres));
   for (const [productoId, cant] of necesario) {
@@ -25,7 +27,7 @@ function verificarStock(items, ub) {
 }
 
 // ---------- Remisiones ----------
-router.post('/remisiones', wrap((req, res) => {
+router.post('/remisiones', requierePermiso('vender'), wrap((req, res) => {
   const b = req.body;
   if (b.uuid) {
     const ya = db.prepare('SELECT id, consecutivo FROM remisiones WHERE uuid=?').get(b.uuid);
@@ -73,7 +75,7 @@ router.post('/remisiones', wrap((req, res) => {
       // la línea se guarda tal como se vendió (2 cajas a $30.000); el inventario se descuenta en unidades base
       db.prepare('INSERT INTO remision_items (remision_id,producto_id,descripcion,cantidad,precio,costo,factor,presentacion,precio_lista) VALUES (?,?,?,?,?,?,?,?,?)')
         .run(id, i.p.id, i.pres.id ? `${i.p.nombre} (${i.pres.nombre})` : i.p.nombre, i.cantidad, i.precio, i.p.costo * i.pres.factor, i.pres.factor, i.pres.nombre, i.lista);
-      if (!exige) moverStock({ productoId: i.p.id, ubicacion: ubDelPunto(punto), delta: -aBase(i.cantidad, i.pres), tipo: 'venta', costo: i.p.costo, referencia: `R-${cons}`, usuarioId: req.user.id });
+      if (!exige) moverStock({ productoId: i.p.id, ubicacion: ubDelPunto(punto), delta: -aBase(i.cantidad, i.pres), tipo: 'venta', costo: i.p.costo, referencia: `R-${cons}`, usuarioId: req.user.id, permitirNegativo: permiteSinStock() });
     }
     if (!exige && pagado > 0) db.prepare('INSERT INTO pagos (fecha,cliente_id,remision_id,ruta_id,bodega_id,usuario_id,valor,metodo) VALUES (?,?,?,?,?,?,?,?)')
       .run(fecha, cli.id, id, punto.ruta_id, punto.bodega_id, req.user.id, pagado, metodo);
@@ -100,18 +102,18 @@ export function cargarRemision(u, id) {
     us.nombre AS vendedor, ru.nombre AS ruta, b.nombre AS bodega, (SELECT nombre FROM usuarios WHERE id=r.aprobado_por) AS aprobador FROM remisiones r JOIN clientes c ON c.id=r.cliente_id JOIN usuarios us ON us.id=r.usuario_id
     JOIN bodegas b ON b.id=r.bodega_id LEFT JOIN rutas ru ON ru.id=r.ruta_id WHERE r.id=?`).get(id);
   if (!r) throw new HttpError(404, 'Remisión no encontrada');
-  if (u.rol === 'vendedor' && r.ruta_id !== u.ruta_id) throw new HttpError(403, 'No puedes ver remisiones de otra ruta');
-  if (u.rol === 'bodeguero' && r.bodega_id !== u.bodega_id) throw new HttpError(403, 'No puedes ver remisiones de otra bodega');
+  if (u.alcance === 'ruta' && r.ruta_id !== u.ruta_id) throw new HttpError(403, 'No puedes ver remisiones de otra ruta');
+  if (u.alcance === 'bodega' && r.bodega_id !== u.bodega_id) throw new HttpError(403, 'No puedes ver remisiones de otra bodega');
   r.punto = r.ruta ? conPrefijo('Ruta', r.ruta) : `Mostrador ${r.bodega}`;
   r.items = db.prepare('SELECT * FROM remision_items WHERE remision_id=?').all(id);
   r.pendiente = r.anulada === 2;
   r.pagos = db.prepare('SELECT metodo, SUM(valor) AS valor FROM pagos WHERE remision_id=? AND anulado=0 GROUP BY metodo ORDER BY metodo').all(id);
   r.rechazada = r.anulada === 1 && !!r.requiere_aprobacion && !!r.aprobado_por;
   r.soportes = listarSoportes(id);
-  if (u.rol === 'vendedor') for (const s of r.soportes) s.repetido_en = [];
+  if (u.alcance === 'ruta') for (const s of r.soportes) s.repetido_en = [];
   r.saldo = r.anulada ? 0 : r2(r.total - r.pagado);
   r.saldo_cliente = db.prepare('SELECT COALESCE(SUM(total-pagado),0) AS s FROM remisiones WHERE cliente_id=? AND anulada=0').get(r.cliente_id).s;
-  if (u.rol === 'vendedor') for (const i of r.items) delete i.costo;
+  if (!can(u, 'ver_costos')) for (const i of r.items) delete i.costo;
   return r;
 }
 router.get('/remisiones/:id', wrap((req, res) => res.json(cargarRemision(req.user, entero(req.params.id)))));
@@ -126,7 +128,7 @@ router.post('/remisiones/:id/anular', wrap((req, res) => {
   tx(() => {
     const r = cargarRemision(req.user, entero(req.params.id));
     if (r.anulada === 1) throw new HttpError(409, 'La remisión ya está anulada');
-    if (req.user.rol === 'vendedor' && (r.usuario_id !== req.user.id || r.fecha.slice(0, 10) !== ahora().slice(0, 10)))
+    if (!can(req.user, 'anular_remisiones') && (r.usuario_id !== req.user.id || r.fecha.slice(0, 10) !== ahora().slice(0, 10)))
       throw new HttpError(403, 'Solo puedes anular tus remisiones del día. Pide ayuda al encargado de tu bodega o al administrador.');
     const motivo = req_(req.body.motivo, 'Indica el motivo de la anulación');
     // una remisión pendiente de aprobación nunca movió inventario ni recibió pagos: no hay nada que devolver
@@ -150,7 +152,7 @@ router.get('/cartera', wrap((req, res) => {
 }));
 
 // Abono a cliente: se aplica a las remisiones a crédito más antiguas (dentro del alcance del usuario)
-router.post('/pagos', wrap((req, res) => {
+router.post('/pagos', requierePermiso('vender'), wrap((req, res) => {
   const b = req.body;
   if (b.uuid) {
     const ya = db.prepare('SELECT 1 FROM pagos WHERE uuid=? OR uuid LIKE ?').get(b.uuid, `${b.uuid}:%`);
@@ -183,7 +185,7 @@ router.post('/pagos', wrap((req, res) => {
 }));
 
 // ---------- Gastos ----------
-router.post('/gastos', wrap((req, res) => {
+router.post('/gastos', requierePermiso('vender'), wrap((req, res) => {
   const punto = resolverPunto(req.user, req.body.punto);
   const valor = num(req.body.valor);
   if (valor <= 0) throw new HttpError(400, 'El valor debe ser mayor a cero');
@@ -216,8 +218,8 @@ export function calcularCierre(fecha, punto) {
     esperado: r2(cobro.efectivo - gastos), inventario, cierre: guardado ?? null,
   };
 }
-router.get('/cierre', wrap((req, res) => res.json(calcularCierre(req.query.fecha || ahora().slice(0, 10), resolverPunto(req.user, req.query.punto)))));
-router.post('/cierre', wrap((req, res) => {
+router.get('/cierre', requierePermiso('vender'), wrap((req, res) => res.json(calcularCierre(req.query.fecha || ahora().slice(0, 10), resolverPunto(req.user, req.query.punto)))));
+router.post('/cierre', requierePermiso('vender'), wrap((req, res) => {
   const punto = resolverPunto(req.user, req.body.punto);
   const fecha = req.body.fecha || ahora().slice(0, 10);
   const c = calcularCierre(fecha, punto);

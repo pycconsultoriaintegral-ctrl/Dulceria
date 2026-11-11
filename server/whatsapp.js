@@ -4,6 +4,7 @@
 import { db, ahora, hoy, getConfig } from './db.js';
 import { r2, conPrefijo } from './util.js';
 import { alertasInventario, textoAlertas } from './alertas.js';
+import { usuarioSistema } from './auth.js';
 
 const API = () => (process.env.WHATSAPP_API_URL || 'https://graph.facebook.com').replace(/\/$/, '');
 const VERSION = () => process.env.WHATSAPP_API_VERSION || 'v23.0';
@@ -46,7 +47,7 @@ export function resumenDelDia(fecha = hoy()) {
   const textoCierres = !conMov.length ? 'sin movimiento' : sinCierre.length ? `${conMov.length - sinCierre.length} de ${conMov.length} (faltan ${nombres(sinCierre).join(', ')})`
     : `todos (${conMov.length})${Math.abs(diferencia) >= 1 ? `, diferencia ${diferencia < 0 ? '-' : '+'}${pesos(Math.abs(diferencia))}` : ', sin diferencias'}`;
   // alertas de inventario de todo el negocio (bodegas y carros)
-  const inv = alertasInventario({ rol: 'admin' });
+  const inv = alertasInventario(usuarioSistema());
   return {
     fecha, remisiones: v.n, inventario: textoAlertas(inv), alertas: inv.resumen, ventas: r2(v.total), efectivo: r2(p.efectivo), transferencias: r2(p.transf), gastos: r2(gastos), cartera: r2(cartera),
     por_aprobar: porAprobar, puntos_con_movimiento: conMov.length, puntos_sin_cierre: nombres(sinCierre), diferencia_cierres: diferencia, por_punto: porPunto, texto_cierres: textoCierres,

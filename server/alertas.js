@@ -3,7 +3,7 @@
 //  - Sin movimiento: hay existencias pero no ha salido nada en N días (en panadería, riesgo de vencimiento).
 import { db, getConfig } from './db.js';
 import { conPrefijo, r2 } from './util.js';
-import { ubicacionesPermitidas } from './scope.js';
+import { ubicacionesPermitidas, can } from './scope.js';
 
 const DIA = 86400000;
 export const diasSinMovimiento = (cfg = getConfig()) => Math.max(1, Math.min(365, Number(cfg.dias_sin_movimiento) || 3));
@@ -12,7 +12,7 @@ export function alertasInventario(u, { dias = diasSinMovimiento(), ahora = Date.
   const lugares = [];
   for (const b of ubicacionesPermitidas(u)) {
     if (!b.activa) continue;
-    if (u.rol !== 'vendedor') lugares.push({ ub: `B${b.id}`, lugar: conPrefijo('Bodega', b.nombre), tipo: 'bodega', bodega: b.nombre });
+    if (u.alcance !== 'ruta') lugares.push({ ub: `B${b.id}`, lugar: conPrefijo('Bodega', b.nombre), tipo: 'bodega', bodega: b.nombre });
     for (const r of b.rutas) if (r.activa) lugares.push({ ub: `R${r.id}`, lugar: conPrefijo('Ruta', r.nombre), tipo: 'carro', bodega: b.nombre });
   }
   const out = { dias, bajo_minimo: [], sin_movimiento: [], resumen: { bajo_minimo: 0, agotados: 0, sin_movimiento: 0, valor_sin_movimiento: 0 } };
@@ -24,7 +24,7 @@ export function alertasInventario(u, { dias = diasSinMovimiento(), ahora = Date.
   // última salida (venta, cargue, traslado, devolución…) y primer movimiento de cada producto en cada lugar
   const mov = new Map(db.prepare(`SELECT producto_id, ubicacion, MAX(CASE WHEN cantidad<0 THEN fecha END) AS ultima_salida, MIN(fecha) AS primero
     FROM movimientos WHERE ubicacion IN (${marcas}) GROUP BY producto_id, ubicacion`).all(...ubs).map((m) => [`${m.ubicacion}:${m.producto_id}`, m]));
-  const verCosto = u.rol !== 'vendedor';
+  const verCosto = can(u, 'ver_costos');
   for (const l of lugares) {
     for (const p of productos) {
       const q = stock.get(`${l.ub}:${p.id}`) ?? 0;

@@ -4,7 +4,7 @@ import { db, HttpError } from '../db.js';
 import { aCsv } from '../csvout.js';
 import { wrap, r2 } from '../util.js';
 import { soloAdmin } from '../auth.js';
-import { B, R, parseUb, nombreUb, sqlAlcance, esAdminOBodeguero, exigir, puedeUb, getRuta } from '../scope.js';
+import { B, R, parseUb, nombreUb, sqlAlcance, can, exigir, puedeUb, getRuta } from '../scope.js';
 import { saldoSQL } from './clientes.js';
 
 const router = Router();
@@ -19,7 +19,7 @@ const rango = (q) => ({ desde: q.desde || '0000-01-01', hasta: q.hasta || '9999-
 router.get('/ventas', wrap((req, res) => {
   const q = req.query;
   const alcance = sqlAlcance(req.user, 'r', { punto: q.punto, ruta_id: q.ruta_id, bodega_id: q.bodega_id });
-  const costos = esAdminOBodeguero(req.user);
+  const costos = can(req.user, 'ver_costos');
   const filas = db.prepare(`SELECT r.fecha, r.consecutivo, COALESCE(ru.nombre,'Mostrador') AS ruta, b.nombre AS bodega, us.nombre AS vendedor, c.nombre AS cliente,
       i.descripcion, i.presentacion, i.cantidad, i.precio, i.precio_lista, i.cantidad*i.precio AS total_linea, i.cantidad*i.costo AS costo_linea, r.tipo_pago, r.anulada
     FROM remision_items i JOIN remisiones r ON r.id=i.remision_id JOIN clientes c ON c.id=r.cliente_id JOIN usuarios us ON us.id=r.usuario_id
@@ -39,7 +39,7 @@ router.get('/cartera', wrap((req, res) => {
 
 router.get('/clientes', wrap((req, res) => {
   const u = req.user;
-  const cond = u.rol === 'admin' ? '1=1' : u.rol === 'vendedor' ? `(c.ruta_id=${Number(u.ruta_id)} OR c.ruta_id IS NULL)`
+  const cond = u.alcance === 'todo' ? '1=1' : u.alcance === 'ruta' ? `(c.ruta_id=${Number(u.ruta_id)} OR c.ruta_id IS NULL)`
     : `(c.ruta_id IS NULL OR c.ruta_id IN (SELECT id FROM rutas WHERE bodega_id=${Number(u.bodega_id)}))`;
   const filas = db.prepare(`SELECT c.nombre, c.negocio, c.telefono, c.direccion, c.documento, ru.nombre AS ruta, ${saldoSQL(u)} AS saldo
     FROM clientes c LEFT JOIN rutas ru ON ru.id=c.ruta_id WHERE c.activo=1 AND ${cond} ORDER BY c.nombre`).all();
@@ -50,8 +50,8 @@ router.get('/clientes', wrap((req, res) => {
 // Existencias por producto: una columna por bodega, más lo que está en rutas (admin y encargado)
 router.get('/inventario', wrap((req, res) => {
   const u = req.user;
-  exigir(esAdminOBodeguero(u));
-  const bodegas = db.prepare('SELECT id, nombre FROM bodegas WHERE activa=1 ORDER BY nombre').all().filter((b) => u.rol === 'admin' || b.id === u.bodega_id);
+  exigir(can(u, 'informes'));
+  const bodegas = db.prepare('SELECT id, nombre FROM bodegas WHERE activa=1 ORDER BY nombre').all().filter((b) => u.alcance === 'todo' || b.id === u.bodega_id);
   const ids = new Set(bodegas.map((b) => b.id));
   const rutaBodega = new Map(db.prepare('SELECT id, bodega_id FROM rutas').all().map((r) => [r.id, r.bodega_id]));
   const productos = db.prepare('SELECT id, codigo, nombre, unidad, costo FROM productos WHERE activo=1 ORDER BY nombre').all();
@@ -63,7 +63,7 @@ router.get('/inventario', wrap((req, res) => {
     if (tipo === 'B' && ids.has(id)) f.por[id] = s.cantidad;
     else if (tipo === 'R' && ids.has(rutaBodega.get(id))) f.rutas += s.cantidad;
   }
-  const verValor = u.rol === 'admin' || u.rol === 'bodeguero';
+  const verValor = can(u, 'ver_costos');
   csv(res, 'inventario', ['Código', 'Producto', 'Unidad', ...bodegas.map((b) => b.nombre), 'En rutas', 'Total', ...(verValor ? ['Costo unitario', 'Valor'] : [])],
     [...filas.values()].map(({ p, por, rutas }) => {
       const total = Object.values(por).reduce((a, x) => a + x, 0) + rutas;
@@ -73,12 +73,12 @@ router.get('/inventario', wrap((req, res) => {
 
 router.get('/movimientos', wrap((req, res) => {
   const u = req.user;
-  exigir(esAdminOBodeguero(u));
+  exigir(can(u, 'informes'));
   const q = req.query;
   let filtro = '';
   const params = rango(q);
   if (q.ub) { parseUb(q.ub); exigir(puedeUb(u, q.ub)); filtro = 'AND m.ubicacion=@ub'; params.ub = q.ub; }
-  else if (u.rol === 'bodeguero') {
+  else if (u.alcance === 'bodega') {
     const ubs = [B(u.bodega_id), ...db.prepare('SELECT id FROM rutas WHERE bodega_id=?').all(u.bodega_id).map((r) => R(r.id))];
     filtro = `AND m.ubicacion IN (${ubs.map((x) => `'${x}'`).join(',')})`;
   }
