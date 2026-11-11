@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { get, post, money, qty, useCarga, useUbicaciones, puedeGestionar, ir, conPrefijo, desglose, factorDe } from '../lib.js';
+import { get, post, money, qty, useCarga, useUbicaciones, can, ir, conPrefijo, desglose, factorDe } from '../lib.js';
 import { Header, Cargando, Vacio, Modal, Campo, Stepper, toast, useAccion, SelectorPresentacion } from '../ui.jsx';
 
 export function Inventario({ user }) {
-  const gestiona = puedeGestionar(user);
+  const gestiona = can(user, 'inventario');
   const { bodegas } = useUbicaciones();
   // vendedor: su ruta; encargado: su bodega; administrador: resumen general
-  const [ub, setUb] = useState(user.rol === 'vendedor' ? `R${user.ruta_id}` : user.rol === 'bodeguero' ? `B${user.bodega_id}` : 'resumen');
+  const [ub, setUb] = useState(user.alcance === 'ruta' ? `R${user.ruta_id}` : user.alcance === 'bodega' ? `B${user.bodega_id}` : 'resumen');
   const [q, setQ] = useState('');
   const s = useCarga(() => get(`/inventario?ub=${ub}`), [ub]);
   const pend = useCarga(() => (gestiona ? get('/traslados?estado=enviado') : []), []);
@@ -15,7 +15,7 @@ export function Inventario({ user }) {
   const [kardex, setKardex] = useState(null);
   const d = s.data;
   const filtrados = (d?.productos || []).filter((p) => p.nombre.toLowerCase().includes(q.toLowerCase()));
-  const porRecibir = (pend.data || []).filter((t) => (user.rol === 'admin' || t.destino_id === user.bodega_id));
+  const porRecibir = (pend.data || []).filter((t) => (user.alcance === 'todo' || t.destino_id === user.bodega_id));
 
   return (
     <>

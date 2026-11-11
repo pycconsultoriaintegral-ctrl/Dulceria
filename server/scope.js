@@ -1,7 +1,7 @@
-// Alcance y permisos por rol:
-//  - admin: todo.
-//  - bodeguero (encargado de bodega): su bodega y las rutas que pertenecen a ella.
-//  - vendedor: solo su ruta.
+// Alcance (hasta dónde ve cada usuario, según su rol) y permisos (qué funciones puede usar):
+//  - alcance 'todo': todas las bodegas y rutas.
+//  - alcance 'bodega': su bodega y las rutas que pertenecen a ella.
+//  - alcance 'ruta': solo su ruta.
 import { db, HttpError } from './db.js';
 import { conPrefijo } from './util.js';
 
@@ -24,16 +24,16 @@ export function nombreUb(codigo) {
 }
 
 export const exigir = (cond, msg = 'No tienes permiso para esto') => { if (!cond) throw new HttpError(403, msg); };
-export const esAdmin = (u) => u.rol === 'admin';
-export const esAdminOBodeguero = (u) => u.rol === 'admin' || u.rol === 'bodeguero';
+export const can = (u, permiso) => !!u.permisos?.includes(permiso);
+export const exigirPermiso = (u, permiso, msg) => exigir(can(u, permiso), msg);
 
 export function puedeBodega(u, bodegaId) {
-  if (u.rol === 'admin') return true;
-  return u.rol === 'bodeguero' && u.bodega_id === Number(bodegaId);
+  if (u.alcance === 'todo') return true;
+  return u.alcance === 'bodega' && u.bodega_id === Number(bodegaId);
 }
 export function puedeRuta(u, rutaId) {
-  if (u.rol === 'admin') return true;
-  if (u.rol === 'vendedor') return u.ruta_id === Number(rutaId);
+  if (u.alcance === 'todo') return true;
+  if (u.alcance === 'ruta') return u.ruta_id === Number(rutaId);
   return getRuta(rutaId)?.bodega_id === u.bodega_id;
 }
 export function puedeUb(u, codigo) {
@@ -44,13 +44,13 @@ export function puedeUb(u, codigo) {
 // Punto de venta/cobro: una ruta o el mostrador de una bodega.
 // El vendedor siempre usa su ruta; los demás eligen (código 'R3' o 'B1').
 export function resolverPunto(u, codigo) {
-  if (u.rol === 'vendedor') {
+  if (u.alcance === 'ruta') {
     if (!u.ruta_id) throw new HttpError(400, 'Tu usuario no tiene ruta asignada. Pide al administrador que la asigne.');
     const r = getRuta(u.ruta_id);
     return { codigo: R(r.id), ruta_id: r.id, bodega_id: r.bodega_id };
   }
   if (!codigo) {
-    if (u.rol === 'bodeguero') return { codigo: B(u.bodega_id), ruta_id: null, bodega_id: u.bodega_id };
+    if (u.alcance === 'bodega') return { codigo: B(u.bodega_id), ruta_id: null, bodega_id: u.bodega_id };
     throw new HttpError(400, 'Elige el punto de venta (una ruta o el mostrador de una bodega)');
   }
   const p = parseUb(codigo);
@@ -75,10 +75,10 @@ export function sqlPunto(alias, punto) {
 // más filtros opcionales (punto, ruta_id, bodega_id) que se validan contra el alcance del usuario.
 export function sqlAlcance(u, alias, { punto, ruta_id, bodega_id } = {}) {
   const c = [];
-  if (u.rol === 'vendedor') {
+  if (u.alcance === 'ruta') {
     if (!u.ruta_id) throw new HttpError(400, 'Tu usuario no tiene ruta asignada');
     c.push(`${alias}.ruta_id=${Number(u.ruta_id)}`);
-  } else if (u.rol === 'bodeguero') {
+  } else if (u.alcance === 'bodega') {
     c.push(`${alias}.bodega_id=${Number(u.bodega_id)}`);
   }
   if (punto) {
@@ -98,9 +98,9 @@ export function ubicacionesPermitidas(u) {
   const out = [];
   for (const b of bodegas) {
     let rs = rutas.filter((r) => r.bodega_id === b.id);
-    if (u.rol === 'bodeguero' && b.id !== u.bodega_id) continue;
-    if (u.rol === 'vendedor') { rs = rs.filter((r) => r.id === u.ruta_id); if (!rs.length) continue; }
-    out.push({ ...b, rutas: rs, puede_mostrador: u.rol !== 'vendedor' });
+    if (u.alcance === 'bodega' && b.id !== u.bodega_id) continue;
+    if (u.alcance === 'ruta') { rs = rs.filter((r) => r.id === u.ruta_id); if (!rs.length) continue; }
+    out.push({ ...b, rutas: rs, puede_mostrador: u.alcance !== 'ruta' });
   }
   return out;
 }

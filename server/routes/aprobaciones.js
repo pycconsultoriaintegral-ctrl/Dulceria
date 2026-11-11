@@ -3,16 +3,16 @@
 //  - Aprueban el encargado de la bodega a la que pertenece el punto de venta y el administrador.
 //  - Al aprobar: el inventario sale, el pago queda registrado como transferencia y la remisión pasa a ser válida.
 import { Router } from 'express';
-import { db, tx, ahora, HttpError, moverStock } from '../db.js';
+import { db, tx, ahora, HttpError, moverStock, permiteSinStock } from '../db.js';
 import { wrap, n, req_, entero } from '../util.js';
-import { sqlAlcance, exigir, puedeBodega } from '../scope.js';
+import { sqlAlcance, exigir, puedeBodega, can } from '../scope.js';
 import { aBase } from '../presentaciones.js';
 import { auditar } from '../auditoria.js';
 import { guardarSoporte, listarSoportes } from '../soportes.js';
 import { cargarRemision, ubDelPunto } from './ventas.js';
 
 const router = Router();
-const aprueba = (u, r) => (u.rol === 'admin' || u.rol === 'bodeguero') && puedeBodega(u, r.bodega_id);
+const aprueba = (u, r) => can(u, 'aprobar_pagos') && puedeBodega(u, r.bodega_id);
 
 // Remisiones pendientes de aprobación dentro del alcance del usuario (el vendedor ve solo las de su ruta)
 router.get('/aprobaciones', wrap((req, res) => {
@@ -49,13 +49,13 @@ router.get('/soportes/:id', wrap((req, res) => {
 router.post('/remisiones/:id/aprobar', wrap((req, res) => {
   const out = tx(() => {
     const r = cargarRemision(req.user, entero(req.params.id));
-    exigir(aprueba(req.user, r), 'Solo el encargado de la bodega o el administrador pueden aprobar pagos');
+    exigir(aprueba(req.user, r), 'No tienes permiso para aprobar pagos de esa bodega');
     exigir(r.usuario_id !== req.user.id || req.user.rol === 'admin', 'No puedes aprobar tu propia venta: pide a otro encargado o al administrador');
     if (!r.pendiente) throw new HttpError(409, r.anulada ? 'La remisión ya está anulada o rechazada' : 'La remisión no está pendiente de aprobación');
     if (!r.soportes.length) throw new HttpError(409, 'Falta el soporte de pago: adjunta la foto de la transferencia antes de aprobar');
     const ub = ubDelPunto(r);
     // el inventario se descuenta ahora; si entre tanto se agotó, falla con el nombre del producto
-    for (const i of r.items) moverStock({ productoId: i.producto_id, ubicacion: ub, delta: -aBase(i.cantidad, { factor: i.factor }), tipo: 'venta', costo: i.costo / i.factor, referencia: `R-${r.consecutivo}`, usuarioId: req.user.id });
+    for (const i of r.items) moverStock({ productoId: i.producto_id, ubicacion: ub, delta: -aBase(i.cantidad, { factor: i.factor }), tipo: 'venta', costo: i.costo / i.factor, referencia: `R-${r.consecutivo}`, usuarioId: req.user.id, permitirNegativo: permiteSinStock() });
     const fecha = ahora();
     // la venta cuenta desde que se aprueba (no desde que se pidió): así el cierre del día y los reportes cuadran con el dinero recibido
     db.prepare('UPDATE remisiones SET anulada=0, fecha=?, pagado=total, aprobado_por=?, fecha_aprobacion=? WHERE id=?').run(fecha, req.user.id, fecha, r.id);
@@ -70,7 +70,7 @@ router.post('/remisiones/:id/aprobar', wrap((req, res) => {
 router.post('/remisiones/:id/rechazar', wrap((req, res) => {
   tx(() => {
     const r = cargarRemision(req.user, entero(req.params.id));
-    exigir(aprueba(req.user, r), 'Solo el encargado de la bodega o el administrador pueden rechazar pagos');
+    exigir(aprueba(req.user, r), 'No tienes permiso para rechazar pagos de esa bodega');
     if (!r.pendiente) throw new HttpError(409, 'La remisión no está pendiente de aprobación');
     const motivo = req_(req.body.motivo, 'Indica por qué se rechaza el pago');
     db.prepare('UPDATE remisiones SET anulada=1, motivo_anulacion=?, aprobado_por=?, fecha_aprobacion=? WHERE id=?')

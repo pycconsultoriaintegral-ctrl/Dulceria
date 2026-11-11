@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { get, post, put, enviar, uuid, money, useCarga, ir, numRem, telWhatsApp, useUbicaciones, puedeGestionar, descargarCsv } from '../lib.js';
+import { get, post, put, enviar, uuid, money, useCarga, ir, numRem, telWhatsApp, useUbicaciones, descargarCsv } from '../lib.js';
 import { Header, Cargando, Vacio, Modal, Campo, toast, useAccion, SelectorPunto } from '../ui.jsx';
 import { NuevoCliente } from './Vender.jsx';
 
@@ -73,8 +73,8 @@ export function Abono({ cliente, user, onClose, onHecho }) {
   const [uid] = useState(uuid());
   const { bodegas } = useUbicaciones();
   // el vendedor cobra siempre en su ruta; el encargado por defecto en su mostrador; el administrador elige
-  const [punto, setPunto] = useState(user?.rol === 'bodeguero' ? `B${user.bodega_id}` : '');
-  const elige = user?.rol !== 'vendedor';
+  const [punto, setPunto] = useState(user?.alcance === 'bodega' ? `B${user.bodega_id}` : '');
+  const elige = user?.alcance !== 'ruta';
   const [ocupado, run] = useAccion();
   return (
     <Modal titulo={`Abono de ${cliente.nombre}`} onClose={onClose}>
@@ -107,8 +107,8 @@ function EditarCliente({ cliente, user, onClose, onHecho }) {
       <Campo label="Teléfono" inputMode="tel" value={f.telefono || ''} onChange={set('telefono')} />
       <Campo label="Dirección" value={f.direccion || ''} onChange={set('direccion')} />
       <Campo label="Documento (CC/NIT)" value={f.documento || ''} onChange={set('documento')} />
-      {user.rol !== 'vendedor' && <label className="row" style={{ gap: 8, margin: '4px 0 12px' }}><input type="checkbox" checked={!!f.paga_antes} onChange={(e) => setF({ ...f, paga_antes: e.target.checked ? 1 : 0 })} /><span>Paga antes de recibir (exige soporte de pago aprobado)</span></label>}
-      {user.rol !== 'vendedor' && <SelectorPunto bodegas={bodegas} value={f.ruta_id ? `R${f.ruta_id}` : ''} onChange={(v) => setF({ ...f, ruta_id: v.startsWith('R') ? Number(v.slice(1)) : null })} label="Ruta del cliente" mostrador={false} vacio="Sin ruta" />}
+      {user.alcance !== 'ruta' && <label className="row" style={{ gap: 8, margin: '4px 0 12px' }}><input type="checkbox" checked={!!f.paga_antes} onChange={(e) => setF({ ...f, paga_antes: e.target.checked ? 1 : 0 })} /><span>Paga antes de recibir (exige soporte de pago aprobado)</span></label>}
+      {user.alcance !== 'ruta' && <SelectorPunto bodegas={bodegas} value={f.ruta_id ? `R${f.ruta_id}` : ''} onChange={(v) => setF({ ...f, ruta_id: v.startsWith('R') ? Number(v.slice(1)) : null })} label="Ruta del cliente" mostrador={false} vacio="Sin ruta" />}
       <button className="btn block" disabled={ocupado} onClick={() => run(async () => { await put(`/clientes/${cliente.id}`, f); onHecho(); }, 'Guardado')}>Guardar</button>
     </Modal>
   );
@@ -125,7 +125,7 @@ export function Cartera({ user }) {
     <>
       <Header titulo="Cartera" />
       <main>
-        {user.rol !== 'vendedor' && <SelectorPunto bodegas={bodegas} value={punto} onChange={setPunto} label="Filtrar por" todos />}
+        {user.alcance !== 'ruta' && <SelectorPunto bodegas={bodegas} value={punto} onChange={setPunto} label="Filtrar por" todos />}
         <div className="row"><input className="q grow" placeholder="Buscar cliente…" value={q} onChange={(e) => setQ(e.target.value)} />
           <button className="btn sm sec" style={{ marginBottom: 10 }} onClick={() => descargarCsv(`/exportar/cartera${punto ? `?punto=${punto}` : ''}`, 'cartera').catch((e) => toast(e.message, true))} title="Descargar para Excel">⬇ Excel</button></div>
         {s.loading || s.error ? <Cargando s={s} /> : (

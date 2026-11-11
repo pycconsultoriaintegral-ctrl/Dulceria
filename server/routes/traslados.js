@@ -5,16 +5,16 @@ import { db, tx, ahora, HttpError, moverStock } from '../db.js';
 import { wrap, n, num, entero } from '../util.js';
 import { presentacionDe, aBase, presentacionesDe } from '../presentaciones.js';
 import { auditar } from '../auditoria.js';
-import { B, getBodega, exigir, esAdminOBodeguero, puedeBodega } from '../scope.js';
+import { B, getBodega, exigir, can, puedeBodega } from '../scope.js';
 
 const router = Router();
-router.use((req, _res, next) => (esAdminOBodeguero(req.user) ? next() : next(new HttpError(403, 'No tienes permiso para esto'))));
+router.use((req, _res, next) => (can(req.user, 'inventario') ? next() : next(new HttpError(403, 'No tienes permiso para esto'))));
 
 const SEL = `SELECT t.*, bo.nombre AS origen, bd.nombre AS destino, ue.nombre AS envia, ur.nombre AS recibe,
   (SELECT COUNT(*) FROM traslado_items i WHERE i.traslado_id=t.id) AS productos
   FROM traslados t JOIN bodegas bo ON bo.id=t.origen_id JOIN bodegas bd ON bd.id=t.destino_id
   LEFT JOIN usuarios ue ON ue.id=t.usuario_envia LEFT JOIN usuarios ur ON ur.id=t.usuario_recibe`;
-const involucra = (u) => (u.rol === 'admin' ? '1=1' : `(t.origen_id=${Number(u.bodega_id)} OR t.destino_id=${Number(u.bodega_id)})`);
+const involucra = (u) => (u.alcance === 'todo' ? '1=1' : `(t.origen_id=${Number(u.bodega_id)} OR t.destino_id=${Number(u.bodega_id)})`);
 
 function cargar(req, id) {
   const t = db.prepare(`${SEL} WHERE t.id=? AND ${involucra(req.user)}`).get(id);

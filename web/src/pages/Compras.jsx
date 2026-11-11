@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { get, post, money, qty, useCarga, useUbicaciones, esAdmin, nombreBodega, factorDe } from '../lib.js';
+import { get, post, money, qty, useCarga, useUbicaciones, esAdmin, can, nombreBodega, factorDe } from '../lib.js';
 import { Header, Cargando, Vacio, Modal, Campo, Stepper, useAccion, SelectorBodega, SelectorPresentacion } from '../ui.jsx';
 
 export function Compras({ user }) {
@@ -17,7 +17,7 @@ export function Compras({ user }) {
       <main>
         {esAdmin(user) && bodegas.length > 1 && <SelectorBodega bodegas={bodegas} value={bodegaF} onChange={setBodegaF} label="Bodega" todos />}
         <div className="row" style={{ marginBottom: 10 }}><button className="btn grow" onClick={() => setNueva(true)}>+ Registrar compra</button><button className="btn sec" onClick={() => setNprov(true)}>Proveedores</button></div>
-        {esAdmin(user) && prov.data?.some((p) => p.deuda > 0.5) && <div className="card"><b>Por pagar a proveedores</b>{prov.data.filter((p) => p.deuda > 0.5).map((p) => <div key={p.id} className="row between"><span>{p.nombre}</span><b className="warn">{money(p.deuda)}</b></div>)}</div>}
+        {can(user, 'pagar_proveedores') && prov.data?.some((p) => p.deuda > 0.5) && <div className="card"><b>Por pagar a proveedores</b>{prov.data.filter((p) => p.deuda > 0.5).map((p) => <div key={p.id} className="row between"><span>{p.nombre}</span><b className="warn">{money(p.deuda)}</b></div>)}</div>}
         {s.loading || s.error ? <Cargando s={s} /> : s.data.length === 0 ? <Vacio>Sin compras registradas</Vacio> : (
           <div className="card list">{s.data.map((c) => (
             <div key={c.id} className="item" onClick={async () => setDet(await get(`/compras/${c.id}`))}>
@@ -32,14 +32,14 @@ export function Compras({ user }) {
         <div className="mut">{det.fecha.slice(0, 16)} · {det.proveedor || 'Sin proveedor'} · Bodega {det.bodega}</div>
         <table className="t"><tbody>{det.items.map((i) => <tr key={i.id}><td>{i.nombre}{i.presentacion ? ` (${i.presentacion})` : ''}</td><td className="n">{qty(i.cantidad)} × {money(i.costo)}</td></tr>)}</tbody></table>
         <div className="right big">{money(det.total)}</div><div className="right mut">Pagado {money(det.pagado)}</div>
-        {esAdmin(user) && !det.anulada && det.total - det.pagado > 0.5 && <button className="btn block" style={{ marginTop: 8 }} disabled={ocupado} onClick={() => { const v = window.prompt('Valor del pago al proveedor', Math.round(det.total - det.pagado)); if (v) run(async () => { await post(`/compras/${det.id}/pago`, { valor: Number(v) }); setDet(null); s.recargar(); prov.recargar(); }, 'Pago registrado'); }}>Registrar pago</button>}
-        {esAdmin(user) && !det.anulada && <button className="btn peligro block" style={{ marginTop: 8 }} disabled={ocupado} onClick={() => { if (window.confirm('¿Anular la compra? Se descuenta el inventario que entró.')) run(async () => { await post(`/compras/${det.id}/anular`); setDet(null); s.recargar(); }, 'Compra anulada'); }}>Anular compra</button>}
+        {can(user, 'pagar_proveedores') && !det.anulada && det.total - det.pagado > 0.5 && <button className="btn block" style={{ marginTop: 8 }} disabled={ocupado} onClick={() => { const v = window.prompt('Valor del pago al proveedor', Math.round(det.total - det.pagado)); if (v) run(async () => { await post(`/compras/${det.id}/pago`, { valor: Number(v) }); setDet(null); s.recargar(); prov.recargar(); }, 'Pago registrado'); }}>Registrar pago</button>}
+        {can(user, 'pagar_proveedores') && !det.anulada && <button className="btn peligro block" style={{ marginTop: 8 }} disabled={ocupado} onClick={() => { if (window.confirm('¿Anular la compra? Se descuenta el inventario que entró.')) run(async () => { await post(`/compras/${det.id}/anular`); setDet(null); s.recargar(); }, 'Compra anulada'); }}>Anular compra</button>}
       </Modal>}
     </>
   );
 }
 function NuevaCompra({ user, bodegas, proveedores, onClose, onHecho }) {
-  const [bodega, setBodega] = useState(user.rol === 'bodeguero' ? String(user.bodega_id) : bodegas.length === 1 ? String(bodegas[0].id) : '');
+  const [bodega, setBodega] = useState(user.alcance === 'bodega' ? String(user.bodega_id) : bodegas.length === 1 ? String(bodegas[0].id) : '');
   const prods = useCarga(() => get('/productos?todos=1'), []);
   const [it, setIt] = useState({}); // id -> {cantidad, costo}
   const [prov, setProv] = useState('');
@@ -52,7 +52,7 @@ function NuevaCompra({ user, bodegas, proveedores, onClose, onHecho }) {
   const total = items.reduce((a, i) => a + i.cantidad * i.costo, 0);
   return (
     <Modal titulo="Registrar compra" onClose={onClose}>
-      {user.rol === 'admin' ? <SelectorBodega bodegas={bodegas} value={bodega} onChange={setBodega} label="Bodega que recibe la compra" />
+      {user.alcance === 'todo' ? <SelectorBodega bodegas={bodegas} value={bodega} onChange={setBodega} label="Bodega que recibe la compra" />
         : <div className="mut" style={{ marginBottom: 10 }}>Llega a tu bodega: <b>{nombreBodega(bodegas, user.bodega_id)}</b></div>}
       <label className="f">Proveedor<select value={prov} onChange={(e) => setProv(e.target.value)}><option value="">Sin proveedor</option>{proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select></label>
       <Campo label="No. factura del proveedor (opcional)" value={factura} onChange={(e) => setFactura(e.target.value)} />

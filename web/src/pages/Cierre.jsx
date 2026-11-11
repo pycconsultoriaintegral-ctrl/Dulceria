@@ -3,10 +3,10 @@ import { get, post, money, qty, useCarga, hoyStr, useUbicaciones } from '../lib.
 import { Header, Cargando, Campo, Modal, useAccion, SelectorPunto } from '../ui.jsx';
 
 export function Cierre({ user }) {
-  const elige = user.rol !== 'vendedor'; // el vendedor cierra siempre su ruta
+  const elige = user.alcance !== 'ruta'; // el vendedor cierra siempre su ruta
   const { bodegas } = useUbicaciones();
   const [fecha, setFecha] = useState(hoyStr());
-  const [ruta, setRuta] = useState(user.rol === 'bodeguero' ? `B${user.bodega_id}` : user.rol === 'vendedor' ? `R${user.ruta_id}` : '');
+  const [ruta, setRuta] = useState(user.alcance === 'bodega' ? `B${user.bodega_id}` : user.alcance === 'ruta' ? `R${user.ruta_id}` : '');
   const s = useCarga(() => (ruta === '' ? null : get(`/cierre?fecha=${fecha}&punto=${ruta}`)), [fecha, ruta]);
   const [gasto, setGasto] = useState(false);
   const [entregado, setEntregado] = useState('');

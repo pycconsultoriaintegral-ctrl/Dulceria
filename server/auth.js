@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
-import { db, HttpError } from './db.js';
+import { db, HttpError, TODOS_LOS_PERMISOS } from './db.js';
 
 export function hashClave(clave) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -24,10 +24,20 @@ function secreto() {
 }
 
 // Usuario con su bodega efectiva: la propia (encargado) o la de su ruta (vendedor)
+// Además lleva lo que su rol le permite: alcance (todo / su bodega / su ruta) y la lista de permisos
 export function cargarUsuario(id) {
-  return db.prepare(`SELECT u.id, u.nombre, u.usuario, u.rol, u.ruta_id, u.activo,
+  const u = db.prepare(`SELECT u.id, u.nombre, u.usuario, u.rol, u.ruta_id, u.activo,
     COALESCE(u.bodega_id, r.bodega_id) AS bodega_id FROM usuarios u LEFT JOIN rutas r ON r.id=u.ruta_id WHERE u.id=?`).get(id);
+  return u && { ...u, ...datosDeRol(u.rol) };
 }
+export function datosDeRol(clave) {
+  const r = db.prepare('SELECT nombre, alcance, permisos FROM roles WHERE clave=?').get(clave);
+  if (!r) return { rol_nombre: clave, alcance: 'ruta', permisos: [] }; // rol desconocido: sin permisos
+  // el administrador siempre tiene todo (no se puede dejar la app sin quien la administre)
+  return { rol_nombre: r.nombre, alcance: r.alcance, permisos: clave === 'admin' ? TODOS_LOS_PERMISOS : JSON.parse(r.permisos) };
+}
+// Usuario interno (resumen automático, tareas programadas): todo el alcance y todos los permisos
+export const usuarioSistema = () => ({ id: null, rol: 'admin', alcance: 'todo', permisos: TODOS_LOS_PERMISOS });
 
 // El token lleva una huella de la contraseña: al cambiarla (o restablecerla) las sesiones anteriores dejan de valer
 const huella = (claveHash) => crypto.createHash('sha256').update(claveHash).digest('hex').slice(0, 16);
@@ -49,5 +59,7 @@ export function requireAuth(req, _res, next) {
   } catch (e) { next(e); }
 }
 
-export const soloAdmin = (req, _res, next) =>
-  req.user.rol === 'admin' ? next() : next(new HttpError(403, 'Solo el administrador puede hacer esto'));
+// Exige un permiso del rol del usuario (ver PERMISOS en db.js)
+export const requierePermiso = (permiso, msg) => (req, _res, next) =>
+  req.user.permisos?.includes(permiso) ? next() : next(new HttpError(403, msg || 'No tienes permiso para esto'));
+export const soloAdmin = requierePermiso('administrar', 'Solo quien administra la app puede hacer esto');

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getUser, getToken, guardarSesion, login, get, useHash, sincronizar, useCola, puedeGestionar } from './lib.js';
+import { getUser, getToken, guardarSesion, login, get, useHash, sincronizar, useCola, can } from './lib.js';
 import { Toaster, Campo, useAccion, toast, VisorPdf, Header } from './ui.jsx';
 import { Inicio } from './pages/Inicio.jsx';
 import Vender from './pages/Vender.jsx';
@@ -62,8 +62,6 @@ export default function App() {
   }, [user]);
 
   if (!user) return <Login onOk={setUser} />;
-  const admin = user.rol === 'admin';
-  const gestiona = puedeGestionar(user);
   const [, base, id] = ruta.split('?')[0].split('/');
   const p = { user, cfg };
   const sinAcceso = <><Header titulo="Sin acceso" /><main><div className="center mut">🔒 Tu usuario no tiene permiso para ver esta pantalla.</div></main></>;
@@ -76,16 +74,16 @@ export default function App() {
     case 'aprobaciones': page = <Aprobaciones {...p} />; break;
     case 'impresora': page = <Impresora {...p} />; break;
     case 'alertas': page = <Alertas {...p} />; break;
-    case 'cuadre-semanal': page = gestiona ? <CuadreSemanal key={id || 'lista'} punto={id} /> : sinAcceso; break;
+    case 'cuadre-semanal': page = can(user, 'cuadre') ? <CuadreSemanal key={id || 'lista'} punto={id} /> : sinAcceso; break;
     case 'inventario': page = <Inventario {...p} />; break;
     case 'cierre': page = <Cierre {...p} />; break;
-    case 'productos': page = admin ? <Productos /> : sinAcceso; break;
-    case 'compras': page = gestiona ? <Compras user={user} /> : sinAcceso; break;
-    case 'reportes': page = gestiona ? <Reportes user={user} /> : sinAcceso; break;
-    case 'actividad': page = admin ? <Actividad /> : sinAcceso; break;
-    case 'importar': page = gestiona ? <Importar user={user} /> : sinAcceso; break;
-    case 'traslados': page = gestiona ? <Traslados user={user} /> : sinAcceso; break;
-    case 'ajustes': page = admin ? <Ajustes cfgRefrescar={cargarCfg} /> : sinAcceso; break;
+    case 'productos': page = can(user, 'productos') ? <Productos /> : sinAcceso; break;
+    case 'compras': page = can(user, 'compras') || can(user, 'pagar_proveedores') ? <Compras user={user} /> : sinAcceso; break;
+    case 'reportes': page = can(user, 'informes') ? <Reportes user={user} /> : sinAcceso; break;
+    case 'actividad': page = can(user, 'administrar') ? <Actividad /> : sinAcceso; break;
+    case 'importar': page = can(user, 'importar') || can(user, 'productos') ? <Importar user={user} /> : sinAcceso; break;
+    case 'traslados': page = can(user, 'inventario') ? <Traslados user={user} /> : sinAcceso; break;
+    case 'ajustes': page = can(user, 'administrar') ? <Ajustes cfgRefrescar={cargarCfg} /> : sinAcceso; break;
     case 'mas': page = <Mas {...p} />; break;
     default: page = <Inicio {...p} />;
   }

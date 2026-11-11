@@ -7,7 +7,7 @@
 import { Router } from 'express';
 import { db, tx, ahora, hoy, HttpError, moverStock, getStock } from '../db.js';
 import { wrap, n, num, r2, entero, conPrefijo } from '../util.js';
-import { resolverPunto, sqlPunto, exigir, esAdminOBodeguero, puedeBodega, ubicacionesPermitidas } from '../scope.js';
+import { resolverPunto, sqlPunto, exigir, can, puedeBodega, ubicacionesPermitidas } from '../scope.js';
 import { auditar } from '../auditoria.js';
 import { calcularCierre, ubDelPunto } from './ventas.js';
 
@@ -27,7 +27,7 @@ export function semana(q = {}) {
 const dias = ({ desde, hasta }) => { const out = []; for (let f = desde; f <= hasta; f = sumarDias(f, 1)) out.push(f); return out; };
 
 function puntoDeCuadre(u, codigo) {
-  exigir(esAdminOBodeguero(u), 'El cuadre semanal lo hacen el encargado de la bodega o el administrador');
+  exigir(can(u, 'cuadre'), 'No tienes permiso para el cuadre semanal');
   const p = resolverPunto(u, codigo);
   exigir(puedeBodega(u, p.bodega_id), 'Ese punto pertenece a otra bodega');
   return p;
@@ -71,7 +71,7 @@ export function resumenSemana(punto, rango) {
 
 // Lista de puntos del alcance con sus números de la semana (pantalla principal del cuadre)
 router.get('/cuadres/semana', wrap((req, res) => {
-  exigir(esAdminOBodeguero(req.user), 'El cuadre semanal lo hacen el encargado de la bodega o el administrador');
+  exigir(can(req.user, 'cuadre'), 'No tienes permiso para el cuadre semanal');
   const rango = semana(req.query);
   const puntos = [];
   for (const b of ubicacionesPermitidas(req.user)) {
@@ -106,7 +106,7 @@ router.get('/cuadres/detalle', wrap((req, res) => {
 
 // Marca (o desmarca) una transferencia como verificada en la cuenta del banco
 router.post('/pagos/:id/verificar', wrap((req, res) => {
-  exigir(esAdminOBodeguero(req.user), 'Solo el encargado de la bodega o el administrador verifican transferencias');
+  exigir(can(req.user, 'cuadre'), 'No tienes permiso para verificar transferencias');
   const p = db.prepare('SELECT * FROM pagos WHERE id=?').get(entero(req.params.id));
   if (!p || p.anulado) throw new HttpError(404, 'Pago no encontrado');
   exigir(puedeBodega(req.user, p.bodega_id), 'Ese pago es de otra bodega');
