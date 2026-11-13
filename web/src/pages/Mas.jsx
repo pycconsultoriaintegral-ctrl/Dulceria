@@ -5,7 +5,7 @@ import { Header, Campo, Modal, useAccion } from '../ui.jsx';
 export function Mas({ user }) {
   const [clave, setClave] = useState(false);
   const items = [
-    ['/aprobaciones', '⏳', can(user, 'aprobar_pagos') ? 'Pagos por aprobar' : 'Mis pendientes de pago'], ['/cartera', '💰', 'Cartera (por cobrar)'], ['/cierre', '🧾', 'Cierre del día'], ['/alertas', '📦', 'Alertas de inventario'], ['/impresora', '🖨', 'Impresora de tirillas'],
+    ['/aprobaciones', '⏳', can(user, 'aprobar_pagos') ? 'Pagos por aprobar' : 'Mis pendientes de pago'], ['/turno', '⏱️', 'Turno (abrir / cerrar)'], ['/cartera', '💰', 'Cartera (por cobrar)'], ['/cierre', '🧾', 'Cierre del día'], ['/alertas', '📦', 'Alertas de inventario'], ['/impresora', '🖨', 'Impresora de tirillas'],
     ...(can(user, 'cuadre') ? [['/cuadre-semanal', '📅', 'Cuadre semanal (sábado)']] : []),
     ...(can(user, 'inventario') ? [['/traslados', '🚚', 'Traslados entre bodegas']] : []),
     ...(can(user, 'compras') || can(user, 'pagar_proveedores') ? [['/compras', '📥', 'Compras y proveedores']] : []),

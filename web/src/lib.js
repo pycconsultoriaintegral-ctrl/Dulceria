@@ -109,6 +109,24 @@ export function useHash() {
 }
 export const ir = (p) => { location.hash = '#' + p; };
 
+// Ubicación del celular (opcional). Se pide al abrir la pantalla y se reutiliza; sin permiso o sin señal de GPS devuelve null y la venta sale igual.
+let ultimaPos = null;
+export function pedirGps(esperar = 3500) {
+  if (!('geolocation' in navigator)) return Promise.resolve(null);
+  const fresca = () => (ultimaPos && Date.now() - ultimaPos.t < 120000 ? { lat: ultimaPos.lat, lng: ultimaPos.lng, gps_precision: ultimaPos.p } : null);
+  if (fresca()) return Promise.resolve(fresca());
+  return new Promise((resolver) => {
+    const fin = setTimeout(() => resolver(fresca()), esperar);
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { clearTimeout(fin); ultimaPos = { lat: pos.coords.latitude, lng: pos.coords.longitude, p: pos.coords.accuracy, t: Date.now() }; resolver(fresca()); },
+        () => { clearTimeout(fin); resolver(null); },
+        { enableHighAccuracy: true, timeout: esperar, maximumAge: 60000 });
+    } catch { clearTimeout(fin); resolver(null); }
+  });
+}
+export const urlMapa = (lat, lng) => `https://www.google.com/maps?q=${lat},${lng}`;
+
 export function useCarga(fn, deps = []) {
   const [state, setState] = useState({ data: null, error: null, loading: true });
   const recargar = useCallback(() => {

@@ -20,7 +20,7 @@ test('una base v2 recibe la columna de transferencias y conserva sus cierres', (
   v2.exec('ALTER TABLE cierres DROP COLUMN transferencias; PRAGMA user_version = 2');
   v2.close();
   const salida = JSON.parse(abrir());
-  assert.equal(salida.v, 9);
+  assert.equal(salida.v, 10);
   assert.ok(salida.cols.includes('transferencias'));
   const despues = new DatabaseSync(archivo);
   const c = despues.prepare('SELECT esperado, transferencias FROM cierres').get();
@@ -28,7 +28,7 @@ test('una base v2 recibe la columna de transferencias y conserva sus cierres', (
   assert.equal(c.esperado, 5000); // el dato de antes sigue ahí
   assert.equal(c.transferencias, 0);
   // abrirla otra vez no cambia nada
-  assert.equal(JSON.parse(abrir()).v, 9);
+  assert.equal(JSON.parse(abrir()).v, 10);
 });
 
 // v9: usuarios.rol deja de estar limitado a tres valores, sin perder usuarios ni referencias
@@ -49,7 +49,7 @@ test('una base v8 (rol limitado a 3 valores) se migra y acepta roles nuevos', ()
   assert.throws(() => v8.exec("INSERT INTO usuarios (nombre,usuario,clave_hash,rol) VALUES ('C','c','x','contador')")); // el límite existía
   v8.close();
   const salida = JSON.parse(correr("import { db } from './server/db.js'; console.log(JSON.stringify({ v: db.prepare('PRAGMA user_version').get().user_version, roles: db.prepare('SELECT COUNT(*) n FROM roles').get().n, fk: db.prepare('PRAGMA foreign_key_check').all().length, activos: db.prepare('SELECT nombre FROM productos WHERE activo=1').all().map((p) => p.nombre) }))"));
-  assert.equal(salida.v, 9);
+  assert.equal(salida.v, 10);
   assert.equal(salida.roles, 6);
   assert.equal(salida.fk, 0);
   assert.deepEqual(salida.activos, ['Pan']); // los conceptos contables quedaron inactivos

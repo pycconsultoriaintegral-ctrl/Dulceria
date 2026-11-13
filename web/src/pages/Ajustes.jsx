@@ -29,6 +29,12 @@ export function Ajustes({ cfgRefrescar }) {
             <Campo label="Prefijo del consecutivo" value={v.prefijo} onChange={set('prefijo')} />
             <label className="f">Mensaje al pie<textarea rows={2} value={v.pie_remision} onChange={set('pie_remision')} /></label>
             <Campo label="Alertar productos sin salidas después de (días)" inputMode="numeric" value={v.dias_sin_movimiento ?? '3'} onChange={set('dias_sin_movimiento')} />
+            <label className="f">Turno de vendedor
+              <select value={v.exigir_turno ?? ''} onChange={set('exigir_turno')}>
+                <option value="">Opcional: abrir y cerrar turno es voluntario</option>
+                <option value="1">Obligatorio: sin turno abierto no se vende</option>
+              </select>
+            </label>
             <label className="f">Vender sin inventario registrado
               <select value={v.permitir_sin_stock ?? ''} onChange={set('permitir_sin_stock')}>
                 <option value="">Automático: solo mientras cargan el inventario</option>

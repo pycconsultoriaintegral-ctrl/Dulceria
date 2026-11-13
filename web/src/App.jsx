@@ -14,6 +14,7 @@ import { Traslados } from './pages/Traslados.jsx';
 import { Importar } from './pages/Importar.jsx';
 import { Actividad } from './pages/Actividad.jsx';
 import { Cierre } from './pages/Cierre.jsx';
+import { Turno } from './pages/Turno.jsx';
 import { Mas } from './pages/Mas.jsx';
 import { Aprobaciones } from './pages/Aprobaciones.jsx';
 import { Impresora } from './pages/Impresora.jsx';
@@ -77,6 +78,7 @@ export default function App() {
     case 'cuadre-semanal': page = can(user, 'cuadre') ? <CuadreSemanal key={id || 'lista'} punto={id} /> : sinAcceso; break;
     case 'inventario': page = <Inventario {...p} />; break;
     case 'cierre': page = <Cierre {...p} />; break;
+    case 'turno': page = can(user, 'vender') ? <Turno {...p} /> : sinAcceso; break;
     case 'productos': page = can(user, 'productos') ? <Productos /> : sinAcceso; break;
     case 'compras': page = can(user, 'compras') || can(user, 'pagar_proveedores') ? <Compras user={user} /> : sinAcceso; break;
     case 'reportes': page = can(user, 'informes') ? <Reportes user={user} /> : sinAcceso; break;
@@ -88,7 +90,7 @@ export default function App() {
     default: page = <Inicio {...p} />;
   }
   const tabs = [['', '🏠', 'Inicio'], ['vender', '🛒', 'Vender'], ['remisiones', '🧾', 'Remisiones'], ['clientes', '👥', 'Clientes'], ['inventario', '📦', 'Inventario'], ['mas', '☰', 'Más']];
-  const activo = ['productos', 'compras', 'reportes', 'ajustes', 'cartera', 'cierre', 'traslados', 'importar', 'actividad', 'aprobaciones', 'impresora', 'cuadre-semanal', 'alertas'].includes(base) ? 'mas' : base || '';
+  const activo = ['productos', 'compras', 'reportes', 'ajustes', 'cartera', 'cierre', 'turno', 'traslados', 'importar', 'actividad', 'aprobaciones', 'impresora', 'cuadre-semanal', 'alertas'].includes(base) ? 'mas' : base || '';
   return (
     <>
       {!online && <div className="banner off">Sin conexión · tus ventas se guardan y se envían al volver la señal</div>}

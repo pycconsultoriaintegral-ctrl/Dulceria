@@ -26,9 +26,10 @@ router.put('/config', soloAdmin, wrap((req, res) => {
     if (malos.length) throw new HttpError(400, `Número de WhatsApp inválido: ${malos.join(', ')} (usa 10 dígitos, ej. 3001234567)`);
   }
   if (req.body.whatsapp_plantilla !== undefined && !/^[a-z0-9_]{1,512}$/.test(req.body.whatsapp_plantilla)) throw new HttpError(400, 'El nombre de la plantilla solo lleva minúsculas, números y _');
+  if (req.body.exigir_turno !== undefined && !['', '0', '1'].includes(String(req.body.exigir_turno))) throw new HttpError(400, 'Valor inválido para exigir turno');
   if (req.body.permitir_sin_stock !== undefined && !['', '0', '1'].includes(String(req.body.permitir_sin_stock))) throw new HttpError(400, 'Valor inválido para vender sin inventario');
   if (req.body.dias_sin_movimiento !== undefined && !(Number.isInteger(Number(req.body.dias_sin_movimiento)) && Number(req.body.dias_sin_movimiento) >= 1 && Number(req.body.dias_sin_movimiento) <= 365)) throw new HttpError(400, 'Los días sin movimiento deben ser un número entre 1 y 365');
-  for (const k of ['negocio', 'nit', 'telefono', 'direccion', 'pie_remision', 'prefijo', 'dias_sin_movimiento', 'permitir_sin_stock', 'whatsapp_activo', 'whatsapp_numeros', 'whatsapp_hora', 'whatsapp_plantilla', 'whatsapp_idioma']) {
+  for (const k of ['negocio', 'nit', 'telefono', 'direccion', 'pie_remision', 'prefijo', 'dias_sin_movimiento', 'permitir_sin_stock', 'exigir_turno', 'whatsapp_activo', 'whatsapp_numeros', 'whatsapp_hora', 'whatsapp_plantilla', 'whatsapp_idioma']) {
     if (req.body[k] !== undefined) db.prepare('INSERT INTO config (clave,valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor').run(k, String(req.body[k]));
   }
   auditar(req.user, 'editar', 'config', null, 'Datos del negocio');

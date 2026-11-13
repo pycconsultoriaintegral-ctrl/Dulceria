@@ -20,6 +20,7 @@ import cuadres from './routes/cuadres.js';
 import whatsapp from './routes/whatsapp.js';
 import informes from './routes/informes.js';
 import alertas from './routes/alertas.js';
+import turnos from './routes/turnos.js';
 
 export function crearApp() {
   const app = express();
@@ -62,6 +63,7 @@ export function crearApp() {
   api.use(whatsapp);
   api.use(informes);
   api.use(alertas);
+  api.use('/turnos', turnos);
   api.use('/reportes', reportes);
   api.use('/importar', importar);
   api.use('/exportar', exportar);
