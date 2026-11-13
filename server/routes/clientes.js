@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db, HttpError } from '../db.js';
-import { wrap, n, req_, entero } from '../util.js';
+import { wrap, n, req_, entero, coordenada } from '../util.js';
 import { getRuta, puedeRuta, exigir, sqlAlcance } from '../scope.js';
 import { auditar } from '../auditoria.js';
 
@@ -47,10 +47,21 @@ const pagaAntesDe = (u, valor) => (u.alcance === 'ruta' || valor === undefined |
 
 router.post('/', wrap((req, res) => {
   const b = req.body;
-  const id = Number(db.prepare('INSERT INTO clientes (nombre,negocio,telefono,direccion,documento,ruta_id,paga_antes) VALUES (?,?,?,?,?,?,?)')
-    .run(req_(b.nombre, 'El nombre es obligatorio'), n(b.negocio), n(b.telefono), n(b.direccion), n(b.documento), rutaDelCliente(req.user, b.ruta_id), pagaAntesDe(req.user, b.paga_antes) ?? 0).lastInsertRowid);
+  const gps = coordenada(b.lat, b.lng);
+  const id = Number(db.prepare('INSERT INTO clientes (nombre,negocio,telefono,direccion,documento,ruta_id,paga_antes,lat,lng) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(req_(b.nombre, 'El nombre es obligatorio'), n(b.negocio), n(b.telefono), n(b.direccion), n(b.documento), rutaDelCliente(req.user, b.ruta_id), pagaAntesDe(req.user, b.paga_antes) ?? 0, gps?.lat ?? null, gps?.lng ?? null).lastInsertRowid);
   if (pagaAntesDe(req.user, b.paga_antes)) auditar(req.user, 'marcar paga antes', 'cliente', id, b.nombre);
   res.json({ id });
+}));
+
+// Guarda la ubicación de la tienda (el vendedor toca «Guardar ubicación» estando en la puerta del cliente)
+router.post('/:id/ubicacion', wrap((req, res) => {
+  const id = entero(req.params.id);
+  puedeVerCliente(req.user, db.prepare('SELECT * FROM clientes WHERE id=?').get(id));
+  const gps = coordenada(req.body.lat, req.body.lng);
+  if (!gps) throw new HttpError(400, 'Ubicación inválida');
+  db.prepare('UPDATE clientes SET lat=?, lng=? WHERE id=?').run(gps.lat, gps.lng, id);
+  res.json({ ok: true, ...gps });
 }));
 
 router.put('/:id', wrap((req, res) => {

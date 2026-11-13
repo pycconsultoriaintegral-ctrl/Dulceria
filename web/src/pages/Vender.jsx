@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
-import { get, post, enviar, uuid, money, qty, useCarga, ir, compartirRemision, abrirPdf, numRem, useUbicaciones, factorDe, listaDe, desglose, puntosDe } from '../lib.js';
+import { useEffect, useMemo, useState } from 'react';
+import { get, post, enviar, uuid, money, qty, useCarga, ir, compartirRemision, abrirPdf, numRem, useUbicaciones, factorDe, listaDe, desglose, puntosDe, pedirGps } from '../lib.js';
 import { Header, Cargando, Stepper, Modal, Campo, toast, useAccion, SelectorPunto, SelectorPresentacion } from '../ui.jsx';
 import { BotonFoto, FotosPendientes } from '../soportes.jsx';
 import { imprimirRemision, preferencias } from '../impresora.js';
 import { ahoraLocal } from '../tirilla.js';
 
 export default function Vender({ user, cfg }) {
+  useEffect(() => { pedirGps(); }, []); // pide el permiso de ubicación desde que abre la pantalla
   const libre = !!cfg?.sin_stock_ok; // carga inicial: se puede vender aunque aún no haya inventario registrado
   const elige = user.alcance !== 'ruta'; // el vendedor siempre vende de su ruta; los demás eligen el punto de venta
   const { bodegas } = useUbicaciones();
@@ -48,8 +49,9 @@ export default function Vender({ user, cfg }) {
     const sinStock = !libre && sel.find((p) => items[p.id].cantidad * factorDe(p, items[p.id].pres) > p.stock_punto);
     if (sinStock) throw new Error(`Solo hay ${qty(sinStock.stock_ruta)} de "${sinStock.nombre}" en la ruta`);
     if (!anticipado && tipo === 'credito' && (Number(abono) || 0) > total) throw new Error('El abono no puede superar el total');
+    const gps = await pedirGps(2500); // dónde se hizo la venta (si hay permiso)
     const payload = {
-      uuid: uid, cliente_id: cliente.id, tipo_pago: anticipado ? 'contado' : tipo, metodo: anticipado ? 'transferencia' : metodo, abono: !anticipado && tipo === 'credito' ? Number(abono) || 0 : 0,
+      ...gps, uuid: uid, cliente_id: cliente.id, tipo_pago: anticipado ? 'contado' : tipo, metodo: anticipado ? 'transferencia' : metodo, abono: !anticipado && tipo === 'credito' ? Number(abono) || 0 : 0,
       descuento: Number(desc) || 0, nota, punto: elige ? punto : undefined, soportes: fotos.length ? fotos : undefined,
       items: sel.map((p) => ({ producto_id: p.id, presentacion_id: items[p.id].pres || undefined, cantidad: items[p.id].cantidad, precio: items[p.id].precio })),
     };

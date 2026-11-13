@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { get, post, money, qty, useCarga, compartirRemision, abrirPdf, numRem, hoyStr, ir, useCola, descartarRechazada, useUbicaciones, conPrefijo, can } from '../lib.js';
+import { get, post, money, qty, useCarga, compartirRemision, abrirPdf, numRem, hoyStr, ir, useCola, descartarRechazada, useUbicaciones, conPrefijo, can, urlMapa } from '../lib.js';
 import { Header, Cargando, Vacio, toast, useAccion, Confirmar, SelectorPunto } from '../ui.jsx';
 import { Soportes } from '../soportes.jsx';
 import { imprimirRemision, preferencias } from '../impresora.js';
@@ -52,7 +52,7 @@ export function RemisionDetalle({ id, user, cfg }) {
           <>
             <div className="card">
               <div className="row between"><h2 style={{ margin: 0 }}>{numRem(cfg, r.consecutivo)}</h2>{r.pendiente ? <span className="tag warn">Por aprobar</span> : r.anulada ? <span className="tag mal">{r.rechazada ? 'Pago rechazado' : 'Anulada'}</span> : null}</div>
-              <div className="mut">{r.pendiente ? `Solicitada ${(r.fecha_solicitud || r.fecha).slice(0, 16)}` : r.fecha.slice(0, 16)} · {r.punto} · {r.vendedor}</div>
+              <div className="mut">{r.pendiente ? `Solicitada ${(r.fecha_solicitud || r.fecha).slice(0, 16)}` : r.fecha.slice(0, 16)} · {r.punto} · {r.vendedor}{r.lat != null && <> · <a href={urlMapa(r.lat, r.lng)} target="_blank" rel="noreferrer">📍 Ver ubicación</a></>}</div>
               <div className="bold" style={{ marginTop: 6 }}>{r.cliente}{r.negocio ? ` · ${r.negocio}` : ''}</div>
               {r.anulada === 1 ? <div className="mal">Motivo: {r.motivo_anulacion}</div> : null}
             </div>

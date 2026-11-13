@@ -120,14 +120,19 @@ router.post('/clientes', wrap((req, res) => {
       if (!puedeRuta(req.user, ruta.id)) { f.error = `La ruta "${r.ruta}" no es de tu bodega`; return f; }
       ruta_id = ruta.id;
     }
-    // un cliente es el mismo si coincide su cédula, su celular o su nombre y negocio
-    const claves = [r.documento && `d:${normalizar(r.documento)}`, dig(r.telefono).length >= 7 && `t:${dig(r.telefono)}`, `n:${normalizar(`${nombre}|${r.negocio ?? ''}`)}`].filter(Boolean);
+    // un cliente es el mismo si coincide su cédula; si la fila no trae cédula, por su celular o su nombre y negocio.
+    // Dos filas con cédulas distintas son clientes distintos aunque se llamen igual o compartan teléfono.
+    const todas = [r.documento && `d:${normalizar(r.documento)}`, dig(r.telefono).length >= 7 && `t:${dig(r.telefono)}`, `n:${normalizar(`${nombre}|${r.negocio ?? ''}`)}`].filter(Boolean);
+    const claves = r.documento ? [`d:${normalizar(r.documento)}`] : todas.filter((k) => !k.startsWith('d:')); // las que se comparan
     const repetida = claves.find((k) => vistos.has(k));
     if (repetida) { f.error = `Repetido en el archivo (ya está en la línea ${vistos.get(repetida)})`; return f; }
-    for (const k of claves) vistos.set(k, r._linea);
+    for (const k of todas) vistos.set(k, r._linea);
     const datos = { nombre, negocio: r.negocio || undefined, telefono: r.telefono || undefined, direccion: r.direccion || undefined, documento: r.documento || undefined, ruta_id };
     f.datos = Object.fromEntries(Object.entries(datos).filter(([, v]) => v !== undefined));
-    const ya = (r.documento && porDoc.get(normalizar(r.documento))) || (dig(r.telefono).length >= 7 && porTel.get(dig(r.telefono))) || porNom.get(normalizar(`${nombre}|${r.negocio ?? ''}`));
+    // con cédula: solo coincide con la misma cédula, o con un cliente ya creado sin cédula y el mismo nombre (se le completa)
+    const sinDoc = (c) => (c && !c.documento ? c : undefined);
+    const ya = r.documento ? (porDoc.get(normalizar(r.documento)) || sinDoc(porNom.get(normalizar(`${nombre}|${r.negocio ?? ''}`))))
+      : (dig(r.telefono).length >= 7 && porTel.get(dig(r.telefono))) || porNom.get(normalizar(`${nombre}|${r.negocio ?? ''}`));
     if (ya) {
       // el encargado solo actualiza clientes de su alcance
       if (ya.ruta_id && !puedeRuta(req.user, ya.ruta_id)) { f.error = 'Ese cliente ya existe y es de otra bodega'; return f; }

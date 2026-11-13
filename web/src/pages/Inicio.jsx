@@ -10,12 +10,16 @@ export function Inicio({ user, cfg }) {
   const nPend = pend.data?.length || 0;
   const alertas = useCarga(() => get('/alertas/inventario').catch(() => null), []);
   const al = alertas.data?.resumen;
+  const turno = useCarga(() => (can(user, 'vender') ? get('/turnos/actual').catch(() => null) : null), []);
   return (
     <>
       <Header titulo={'Mi Pan POS'} />
       <main>
         <p className="mut" style={{ marginTop: 0 }}>Hola, <b>{user.nombre}</b> · {hoyStr()}</p>
         <button className="btn block" style={{ fontSize: 18, padding: 16, marginBottom: 12 }} onClick={() => ir('/vender')}>🛒 Nueva venta</button>
+        {turno.data && (turno.data.turno
+          ? <div className="aviso ok" style={{ cursor: 'pointer' }} onClick={() => ir('/turno')}><b>⏱️ Turno abierto</b> desde {turno.data.turno.abierto_en.slice(11, 16)} · toca para ver o cerrarlo</div>
+          : turno.data.exigir && <div className="aviso pend" style={{ cursor: 'pointer' }} onClick={() => ir('/turno')}><b>⏱️ Abre tu turno</b> para poder vender. Toca aquí.</div>)}
         {al && (al.bajo_minimo > 0 || al.sin_movimiento > 0) && (
           <div className={'aviso ' + (al.agotados ? 'mal' : 'pend')} style={{ cursor: 'pointer' }} onClick={() => ir('/alertas')}>
             <b>📦 Inventario:</b> {al.bajo_minimo > 0 && <>{al.bajo_minimo} bajo mínimo{al.agotados ? ` (${al.agotados} agotados)` : ''}</>}

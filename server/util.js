@@ -22,3 +22,11 @@ export const entero = (v, msg = 'Valor inválido') => {
 // "Ruta" + "Norte" -> "Ruta Norte"; si el nombre ya empieza por el prefijo ("Ruta Norte") no se repite
 export const conPrefijo = (prefijo, nombre) =>
   String(nombre ?? '').toLowerCase().startsWith(prefijo.toLowerCase()) ? String(nombre) : `${prefijo} ${nombre}`;
+
+// Coordenadas válidas (o null): latitud -90..90 y longitud -180..180
+export function coordenada(lat, lng) {
+  if (lat === undefined || lat === null || lat === '' || lng === undefined || lng === null || lng === '') return null;
+  const a = Number(lat), o = Number(lng);
+  if (!Number.isFinite(a) || !Number.isFinite(o) || Math.abs(a) > 90 || Math.abs(o) > 180) return null;
+  return { lat: Math.round(a * 1e6) / 1e6, lng: Math.round(o * 1e6) / 1e6 };
+}

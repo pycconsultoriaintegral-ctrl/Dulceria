@@ -2,8 +2,9 @@
 import { Router } from 'express';
 import { db, tx, ahora, HttpError, moverStock, getStock, getConfig, permiteSinStock } from '../db.js';
 import { requierePermiso } from '../auth.js';
+import { turnoAbierto } from './turnos.js';
 import { remisionPdf, remisionTicket } from '../pdf.js';
-import { wrap, n, num, r2, req_, entero, conPrefijo } from '../util.js';
+import { wrap, n, num, r2, req_, entero, conPrefijo, coordenada } from '../util.js';
 import { B, R, getRuta, resolverPunto, sqlAlcance, sqlPunto, exigir, can, puedeRuta, puedeBodega, puedeUb, parseUb } from '../scope.js';
 import { puedeVerCliente } from './clientes.js';
 import { presentacionDe, aBase, precioLista } from '../presentaciones.js';
@@ -26,6 +27,9 @@ function verificarStock(items, ub) {
   }
 }
 
+// Ubicación enviada por el celular al vender (opcional: si el vendedor no da permiso, la venta sale igual)
+const gpsDe = (b) => { const t = coordenada(b.lat, b.lng); return t ? [t.lat, t.lng, Number.isFinite(Number(b.gps_precision)) ? Math.round(Number(b.gps_precision)) : null] : [null, null, null]; };
+
 // ---------- Remisiones ----------
 router.post('/remisiones', requierePermiso('vender'), wrap((req, res) => {
   const b = req.body;
@@ -33,6 +37,7 @@ router.post('/remisiones', requierePermiso('vender'), wrap((req, res) => {
     const ya = db.prepare('SELECT id, consecutivo FROM remisiones WHERE uuid=?').get(b.uuid);
     if (ya) return res.json({ ...ya, repetida: true });
   }
+  if (getConfig().exigir_turno === '1' && !turnoAbierto(req.user.id)) throw new HttpError(409, 'Abre tu turno antes de vender (Más → Turno)');
   if (!Array.isArray(b.items) || !b.items.length) throw new HttpError(400, 'Agrega al menos un producto');
   const punto = resolverPunto(req.user, b.punto);
   const metodo = metodoDe(b.metodo);
@@ -68,9 +73,9 @@ router.post('/remisiones', requierePermiso('vender'), wrap((req, res) => {
     if (exige) verificarStock(items, ubDelPunto(punto));
     const cons = (db.prepare('SELECT MAX(consecutivo) AS m FROM remisiones').get().m ?? 0) + 1;
     const fecha = ahora();
-    const id = Number(db.prepare(`INSERT INTO remisiones (uuid,consecutivo,fecha,cliente_id,ruta_id,bodega_id,usuario_id,tipo_pago,subtotal,descuento,total,pagado,nota,anulada,requiere_aprobacion,fecha_solicitud)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(n(b.uuid), cons, fecha, cli.id, punto.ruta_id, punto.bodega_id, req.user.id, tipoPago, subtotal, descuento, total, exige ? 0 : pagado, n(b.nota),
-      exige ? 2 : 0, exige ? 1 : 0, exige ? fecha : null).lastInsertRowid);
+    const id = Number(db.prepare(`INSERT INTO remisiones (uuid,consecutivo,fecha,cliente_id,ruta_id,bodega_id,usuario_id,tipo_pago,subtotal,descuento,total,pagado,nota,anulada,requiere_aprobacion,fecha_solicitud,lat,lng,gps_precision)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(n(b.uuid), cons, fecha, cli.id, punto.ruta_id, punto.bodega_id, req.user.id, tipoPago, subtotal, descuento, total, exige ? 0 : pagado, n(b.nota),
+      exige ? 2 : 0, exige ? 1 : 0, exige ? fecha : null, ...gpsDe(b)).lastInsertRowid);
     for (const i of items) {
       // la línea se guarda tal como se vendió (2 cajas a $30.000); el inventario se descuenta en unidades base
       db.prepare('INSERT INTO remision_items (remision_id,producto_id,descripcion,cantidad,precio,costo,factor,presentacion,precio_lista) VALUES (?,?,?,?,?,?,?,?,?)')

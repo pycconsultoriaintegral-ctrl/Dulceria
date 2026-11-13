@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { get, post, put, enviar, uuid, money, useCarga, ir, numRem, telWhatsApp, useUbicaciones, descargarCsv } from '../lib.js';
+import { get, post, put, enviar, uuid, money, useCarga, ir, numRem, telWhatsApp, useUbicaciones, descargarCsv, pedirGps, urlMapa } from '../lib.js';
 import { Header, Cargando, Vacio, Modal, Campo, toast, useAccion, SelectorPunto } from '../ui.jsx';
 import { NuevoCliente } from './Vender.jsx';
 
@@ -32,6 +32,7 @@ export function ClienteDetalle({ id, user, cfg }) {
   const s = useCarga(() => get(`/clientes/${id}`), [id]);
   const [abonar, setAbonar] = useState(false);
   const [editar, setEditar] = useState(false);
+  const [ocupadoGps, runGps] = useAccion();
   const c = s.data;
   return (
     <>
@@ -43,6 +44,15 @@ export function ClienteDetalle({ id, user, cfg }) {
               <h2 style={{ margin: 0 }}>{c.nombre}{c.paga_antes ? <span className="tag warn" style={{ marginLeft: 8, verticalAlign: 'middle' }}>Paga antes</span> : null}</h2>
               <div className="mut">{c.negocio} {c.direccion && `· ${c.direccion}`}</div>
               {c.telefono && <div><a href={`tel:${c.telefono}`}>{c.telefono}</a> · <a href={`https://wa.me/${telWhatsApp(c.telefono)}`} target="_blank" rel="noreferrer">WhatsApp</a></div>}
+              <div className="row" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                {c.lat != null && <a className="btn sm sec" href={urlMapa(c.lat, c.lng)} target="_blank" rel="noreferrer">📍 Cómo llegar</a>}
+                <button className="btn sm gris" disabled={ocupadoGps} onClick={() => runGps(async () => {
+                  const g = await pedirGps(8000);
+                  if (!g) throw new Error('No se pudo obtener la ubicación. Activa el GPS y da permiso de ubicación al navegador.');
+                  if (c.lat != null && !window.confirm('Esta tienda ya tiene ubicación guardada. ¿Reemplazarla por donde estás ahora?')) return;
+                  await post(`/clientes/${c.id}/ubicacion`, g); s.recargar();
+                }, 'Ubicación guardada')}>{c.lat != null ? '📍 Actualizar ubicación' : '📍 Guardar ubicación aquí'}</button>
+              </div>
               <div className="row between" style={{ marginTop: 10 }}>
                 <div><div className="mut">Saldo pendiente</div><div className={'big ' + (c.saldo > 0.5 ? 'warn' : 'ok')}>{money(c.saldo)}</div></div>
                 <div className="row">{c.saldo > 0.5 && <button className="btn" onClick={() => setAbonar(true)}>Registrar abono</button>}<button className="btn sm gris" onClick={() => setEditar(true)}>Editar</button></div>

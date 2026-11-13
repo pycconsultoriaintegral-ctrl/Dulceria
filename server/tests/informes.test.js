@@ -54,7 +54,7 @@ test('preparar: dos vendedores, ventas este periodo y el anterior', async () => 
   ctx.c3 = (await call('POST', '/clientes', { nombre: 'Tienda Tres' }, ctx.nico)).body.id;
   // periodo anterior: Tienda Tres compró hace 10 días (fecha movida a mano) y no ha vuelto
   const vieja = (await call('POST', '/remisiones', { cliente_id: ctx.c3, tipo_pago: 'contado', items: [{ producto_id: ctx.pan, cantidad: 5 }] }, ctx.nico)).body;
-  const hace10 = new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10);
+  const hace10 = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Bogota' }).format(new Date(Date.now() - 10 * 86400000)); // en la hora del negocio, no en UTC (de noche difieren de día)
   db.prepare("UPDATE remisiones SET fecha=? || substr(fecha,11) WHERE id=?").run(hace10, vieja.id);
   db.prepare("UPDATE pagos SET fecha=? || substr(fecha,11) WHERE remision_id=?").run(hace10, vieja.id);
   ctx.hace10 = hace10;

@@ -156,3 +156,14 @@ test('plantilla de carga inicial: productos con mínimos y una columna de cantid
   // una columna que no existe se explica
   assert.match((await call('POST', '/importar/inventario', { texto: hoja, ub: `R${ruta}`, columna: 'Carro 9' }, admin)).body.error, /Falta la columna/);
 });
+
+test('importar clientes: mismo nombre con distinta cédula son clientes distintos', async () => {
+  const { admin } = ctx;
+  const texto = ['Nombre\tDocumento\tTeléfono', 'Tienda La Bridi\t5416406\t3137696625', 'Tienda La Bridi\t6871695\t3137696625', 'Tienda La Bridi\t5416406\t3137696625'].join('\n');
+  const r = (await call('POST', '/importar/clientes', { texto, aplicar: true }, admin)).body;
+  assert.equal(r.resumen.crear, 2); // las dos cédulas distintas
+  assert.equal(r.resumen.errores, 1); // la misma cédula repetida en el archivo
+  assert.match(r.filas[2].error, /Repetido/);
+  const bridi = (await call('GET', '/clientes', null, admin)).body.filter((c) => c.nombre === 'Tienda La Bridi');
+  assert.deepEqual(bridi.map((c) => c.documento).sort(), ['5416406', '6871695']);
+});
