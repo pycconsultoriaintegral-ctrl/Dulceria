@@ -41,8 +41,8 @@ function Ventas({ user }) {
   const d = s.data;
   const vendedores = [...new Set((d?.ventas || []).map((v) => v.vendedor))];
   const color = (v) => COLORES[vendedores.indexOf(v) % COLORES.length];
-  const puntos = (d?.ventas || []).map((v) => ({ lat: v.lat, lng: v.lng, color: color(v.vendedor), titulo: `${v.cliente} · ${money(v.total)}`,
-    detalle: [`${v.fecha.slice(11, 16)} · ${v.vendedor} · ${v.punto}`, `Remisión ${v.consecutivo}${v.gps_precision ? ` · precisión ±${v.gps_precision} m` : ''}`] }));
+  const puntos = (d?.ventas || []).map((v) => ({ lat: v.lat, lng: v.lng, color: v.pendiente ? '#9ca3af' : color(v.vendedor), titulo: `${v.cliente} · ${money(v.total)}`,
+    detalle: [`${v.fecha.slice(11, 16)} · ${v.vendedor} · ${v.punto}${v.pendiente ? ' · POR APROBAR (pago anticipado)' : ''}`, `Remisión ${v.consecutivo}${v.gps_precision ? ` · precisión ±${v.gps_precision} m` : ''}`] }));
   return (
     <>
       <div className="grid2">
@@ -53,12 +53,13 @@ function Ventas({ user }) {
         <>
           <Mapa puntos={puntos} />
           <div className="mut">📍 {d.con_ubicacion} de {d.total_ventas} venta(s) con ubicación{d.total_ventas > d.con_ubicacion ? ' (las demás se hicieron sin GPS o sin permiso de ubicación)' : ''}.</div>
+          {d.ventas.some((v) => v.pendiente) && <div className="mut">⚪ Gris: venta pendiente de aprobación del pago.</div>}
           {vendedores.length > 0 && <div className="row" style={{ flexWrap: 'wrap', gap: 10, margin: '8px 0' }}>{vendedores.map((v) => <span key={v}><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 6, background: color(v), marginRight: 4 }} />{v}</span>)}</div>}
           {d.ventas.length > 0 && (
             <div className="card list">
               {d.ventas.map((v) => (
                 <div key={v.id} className="item" style={{ cursor: 'default' }}>
-                  <div className="grow"><div className="bold">{v.cliente}</div><div className="mut">{v.fecha.slice(11, 16)} · {v.vendedor} · {v.punto}</div></div>
+                  <div className="grow"><div className="bold">{v.cliente}{v.pendiente && <span className="tag warn" style={{ marginLeft: 6 }}>Por aprobar</span>}</div><div className="mut">{v.fecha.slice(11, 16)} · {v.vendedor} · {v.punto}</div></div>
                   <div className="right"><b>{money(v.total)}</b><div><a href={urlMapa(v.lat, v.lng)} target="_blank" rel="noreferrer">📍 mapa</a></div></div>
                 </div>))}
             </div>)}
