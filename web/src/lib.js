@@ -38,18 +38,63 @@ async function raw(method, url, body, opts = {}) {
   return data;
 }
 
-// GET con respaldo en caché local para poder trabajar sin señal (catálogos)
-const CACHEABLES = ['/productos', '/clientes', '/config', '/rutas', '/ubicaciones'];
+// GET con respaldo en caché local para poder trabajar sin señal: catálogos, inventarios, remisiones, cartera, turno…
+// Se guarda lo último que se vio con señal (y la precarga de abajo descarga de antemano lo que le toca a cada usuario).
+const CACHEABLES = ['/productos', '/clientes', '/config', '/rutas', '/ubicaciones', '/bodegas', '/inventario', '/remisiones', '/cartera', '/aprobaciones', '/turnos', '/alertas', '/cierre', '/reportes', '/compras', '/proveedores', '/traslados', '/mapa'];
+const esCacheable = (url) => { const ruta = url.split('?')[0]; return CACHEABLES.some((c) => ruta === c || ruta.startsWith(c + '/')); };
 export async function get(url) {
-  const cacheable = CACHEABLES.includes(url.split('?')[0]);
+  const cacheable = esCacheable(url);
   try {
     const d = await raw('GET', url);
-    if (cacheable) ls.set('dr_cache:' + url, d);
+    if (cacheable) ls.set('dr_cache:' + url, { __c: 1, t: Date.now(), d });
     return d;
   } catch (e) {
-    if (e instanceof OfflineError && cacheable) { const c = ls.get('dr_cache:' + url); if (c) return c; }
+    if (e instanceof OfflineError && cacheable) {
+      const c = ls.get('dr_cache:' + url);
+      if (c) { viendoGuardado = true; return c.__c ? c.d : c; }
+    }
     throw e;
   }
+}
+export let viendoGuardado = false; // la última lectura salió del teléfono (sin señal)
+
+// Descarga de antemano, con señal, todo lo que cada usuario necesita para trabajar sin conexión
+let precargando = false;
+export async function precargar(user) {
+  if (!user || precargando || !navigator.onLine) return;
+  precargando = true;
+  const hoy = hoyStr();
+  const intentar = (u) => get(u).catch(() => null);
+  try {
+    const ub = await get('/ubicaciones');
+    await Promise.all([intentar('/config'), intentar('/rutas'), intentar('/clientes'), intentar('/bodegas'), intentar('/aprobaciones'), intentar('/alertas/inventario'), intentar('/turnos/actual')]);
+    const todos = puntosDe(ub.bodegas);
+    const puntos = user.alcance === 'ruta' ? [''] : todos.map((p) => p.codigo);
+    for (const p of puntos) await intentar(`/productos?punto=${p}`);
+    // inventario de cada lugar (y el resumen para quien ve todo)
+    const lugares = user.alcance === 'ruta' ? [`R${user.ruta_id}`] : [...ub.bodegas.map((b) => `B${b.id}`), ...ub.bodegas.flatMap((b) => b.rutas.map((r) => `R${r.id}`))];
+    if (user.alcance !== 'ruta' && can(user, 'inventario')) await intentar('/inventario?ub=resumen');
+    for (const l of lugares) await intentar(`/inventario?ub=${l}`);
+    // remisiones de hoy, cartera y cierre
+    await intentar(`/remisiones?desde=${hoy}&hasta=${hoy}`);
+    await intentar('/cartera');
+    if (user.alcance === 'ruta') await intentar(`/cierre?fecha=${hoy}`);
+    if (can(user, 'informes')) await intentar(`/reportes/resumen?desde=${hoy}&hasta=${hoy}`);
+  } finally { precargando = false; }
+}
+
+// Al vender sin señal, el stock guardado en el teléfono baja con cada venta (para no vender de más)
+function descontarCache(payload) {
+  const clave = 'dr_cache:/productos?punto=' + (payload.punto ?? '');
+  const c = ls.get(clave);
+  if (!c || !c.__c) return;
+  for (const i of payload.items || []) {
+    const p = c.d.find((x) => x.id === i.producto_id);
+    if (!p) continue;
+    const pres = i.presentacion_id ? p.presentaciones?.find((x) => x.id === Number(i.presentacion_id)) : null;
+    p.stock_punto = Math.max(0, (p.stock_punto ?? 0) - Number(i.cantidad) * (pres?.factor ?? 1));
+  }
+  ls.set(clave, c);
 }
 export const post = (u, b) => raw('POST', u, b ?? {});
 export const put = (u, b) => raw('PUT', u, b ?? {});
@@ -73,6 +118,7 @@ export async function enviar(tipo, payload, etiqueta) {
     if (!(e instanceof OfflineError)) throw e;
     // si el celular no tiene espacio (por ejemplo, con varias fotos de comprobantes) no se puede guardar: hay que avisar, no perder la venta en silencio
     if (!ls.set(K.cola, [...cola(), { tipo, payload, uuid: payload.uuid, etiqueta }])) throw new Error('No hay espacio en el celular para guardar la venta sin señal. Quita las fotos del soporte o espera a tener conexión.');
+    if (tipo === 'venta') descontarCache(payload);
     avisar();
     return { ok: false, pendiente: true };
   }

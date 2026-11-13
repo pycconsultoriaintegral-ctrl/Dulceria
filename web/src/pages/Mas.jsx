@@ -7,7 +7,8 @@ export function Mas({ user }) {
   const items = [
     ['/aprobaciones', '⏳', can(user, 'aprobar_pagos') ? 'Pagos por aprobar' : 'Mis pendientes de pago'], ['/turno', '⏱️', 'Turno (abrir / cerrar)'], ['/cartera', '💰', 'Cartera (por cobrar)'], ['/cierre', '🧾', 'Cierre del día'], ['/alertas', '📦', 'Alertas de inventario'], ['/impresora', '🖨', 'Impresora de tirillas'],
     ...(can(user, 'cuadre') ? [['/cuadre-semanal', '📅', 'Cuadre semanal (sábado)']] : []),
-    ...(can(user, 'inventario') ? [['/traslados', '🚚', 'Traslados entre bodegas']] : []),
+    ['/mapa', '🗺️', 'Mapa de ventas y tiendas'],
+    ...(can(user, 'inventario') ? [['/kardex', '📒', 'Kardex (movimientos de inventario)'], ['/traslados', '🚚', 'Traslados entre bodegas']] : []),
     ...(can(user, 'compras') || can(user, 'pagar_proveedores') ? [['/compras', '📥', 'Compras y proveedores']] : []),
     ...(can(user, 'informes') ? [['/reportes', '📊', 'Reportes']] : []),
     ...(can(user, 'importar') || can(user, 'productos') ? [['/importar', '📤', 'Importar desde Excel']] : []),

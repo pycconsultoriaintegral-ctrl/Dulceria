@@ -76,10 +76,10 @@ export function Importar({ user }) {
           <label className="f">Inventario que contaste
             <select value={ub} onChange={(e) => { setUb(e.target.value); setRes(null); }}>
               <option value="">— elegir —</option>
-              {bodegas.map((b) => (
+              {bodegas.filter((b) => b.activa).map((b) => (
                 <optgroup key={b.id} label={b.nombre}>
                   <option value={`B${b.id}`}>{conPrefijo('Bodega', b.nombre)}</option>
-                  {b.rutas.map((r) => <option key={r.id} value={`R${r.id}`}>{conPrefijo('Ruta', r.nombre)}</option>)}
+                  {b.rutas.filter((r) => r.activa).map((r) => <option key={r.id} value={`R${r.id}`}>{conPrefijo('Ruta', r.nombre)}</option>)}
                 </optgroup>
               ))}
             </select>

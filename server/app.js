@@ -21,6 +21,7 @@ import whatsapp from './routes/whatsapp.js';
 import informes from './routes/informes.js';
 import alertas from './routes/alertas.js';
 import turnos from './routes/turnos.js';
+import mapa from './routes/mapa.js';
 
 export function crearApp() {
   const app = express();
@@ -35,13 +36,13 @@ export function crearApp() {
 
   // Encabezados de seguridad. La política de contenido solo permite lo que sirve la propia app
   // (el estilo en línea es necesario para los estilos de React; los trabajadores blob: para el visor de PDF).
-  const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; "
+  const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; font-src 'self'; connect-src 'self'; "
     + "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
     res.setHeader('Content-Security-Policy', CSP);
     if (req.path.startsWith('/api')) res.setHeader('Cache-Control', 'no-store'); // los datos nunca se guardan en cachés intermedias
     next();
@@ -64,6 +65,7 @@ export function crearApp() {
   api.use(informes);
   api.use(alertas);
   api.use('/turnos', turnos);
+  api.use('/mapa', mapa);
   api.use('/reportes', reportes);
   api.use('/importar', importar);
   api.use('/exportar', exportar);

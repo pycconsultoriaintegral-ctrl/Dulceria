@@ -39,14 +39,14 @@ export function BotonFoto({ onFoto, texto = '📷 Adjuntar soporte', disabled, c
 }
 
 // Carga una imagen protegida (necesita la sesión) y la muestra
-export function Imagen({ id, alt, onClick }) {
+export function Imagen({ id, alt, onClick, url: ruta }) {
   const [src, setSrc] = useState(null);
   const [fallo, setFallo] = useState(false);
   useEffect(() => {
     let url; let vivo = true;
-    blob(`/soportes/${id}`).then((b) => { if (vivo) { url = URL.createObjectURL(b); setSrc(url); } }).catch(() => vivo && setFallo(true));
+    blob(ruta || `/soportes/${id}`).then((b) => { if (vivo) { url = URL.createObjectURL(b); setSrc(url); } }).catch(() => vivo && setFallo(true));
     return () => { vivo = false; if (url) URL.revokeObjectURL(url); };
-  }, [id]);
+  }, [id, ruta]);
   if (fallo) return <div className="foto vacia mut">No se pudo cargar</div>;
   return src ? <img className="foto" src={src} alt={alt} onClick={onClick} /> : <div className="foto vacia mut">…</div>;
 }

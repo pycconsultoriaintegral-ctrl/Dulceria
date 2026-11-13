@@ -105,4 +105,34 @@ router.get('/inventario/kardex/:productoId', wrap((req, res) => {
   res.json(filas.map((m) => ({ ...m, ubicacion_nombre: nombreUb(m.ubicacion) })));
 }));
 
+// Kardex general: todos los movimientos de inventario con el saldo de cada producto en cada lugar, dentro del alcance del usuario
+export function consultarKardex(u, q, limite = 1000) {
+  exigir(can(u, 'inventario'));
+  let ubs = null;
+  if (u.alcance === 'bodega') ubs = [B(u.bodega_id), ...db.prepare('SELECT id FROM rutas WHERE bodega_id=?').all(u.bodega_id).map((r) => R(r.id))];
+  else if (u.alcance === 'ruta') ubs = [R(u.ruta_id)];
+  const params = ubs ? [...ubs] : [];
+  const alcance = ubs ? `m.ubicacion IN (${ubs.map(() => '?').join(',')})` : '1=1';
+  const filtros = ['substr(fecha,1,10) BETWEEN ? AND ?'];
+  params.push(q.desde || '0000-01-01', q.hasta || '9999-12-31');
+  if (q.ub) { parseUb(q.ub); exigir(puedeUb(u, q.ub), 'No tienes permiso sobre esa ubicación'); filtros.push('ubicacion=?'); params.push(q.ub); }
+  if (q.producto_id) { filtros.push('producto_id=?'); params.push(entero(q.producto_id)); }
+  if (q.q) { filtros.push('producto LIKE ?'); params.push(`%${String(q.q).slice(0, 60)}%`); }
+  if (q.tipo) { filtros.push('tipo=?'); params.push(String(q.tipo)); }
+  // el saldo se calcula sobre todo el historial de cada producto y lugar; los filtros solo recortan lo que se muestra
+  const filas = db.prepare(`SELECT * FROM (SELECT m.id, m.fecha, m.producto_id, p.nombre AS producto, p.codigo, m.ubicacion, m.tipo, m.cantidad, m.costo, m.referencia, m.nota, us.nombre AS usuario,
+      SUM(m.cantidad) OVER (PARTITION BY m.producto_id, m.ubicacion ORDER BY m.id) AS saldo
+    FROM movimientos m JOIN productos p ON p.id=m.producto_id LEFT JOIN usuarios us ON us.id=m.usuario_id WHERE ${alcance})
+    WHERE ${filtros.join(' AND ')} ORDER BY id DESC LIMIT ${Number(limite) + 1}`).all(...params);
+  const nombres = new Map();
+  const nombre = (ub) => { if (!nombres.has(ub)) nombres.set(ub, nombreUb(ub)); return nombres.get(ub); };
+  const truncado = filas.length > limite;
+  return { truncado, filas: filas.slice(0, limite).map((m) => ({ ...m, lugar: nombre(m.ubicacion) })) };
+}
+router.get('/inventario/movimientos', wrap((req, res) => {
+  const r = consultarKardex(req.user, req.query, 1000);
+  const tipos = db.prepare('SELECT DISTINCT tipo FROM movimientos ORDER BY tipo').all().map((x) => x.tipo);
+  res.json({ ...r, tipos });
+}));
+
 export default router;

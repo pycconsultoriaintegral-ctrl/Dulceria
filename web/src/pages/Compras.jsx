@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { get, post, money, qty, useCarga, useUbicaciones, esAdmin, can, nombreBodega, factorDe } from '../lib.js';
 import { Header, Cargando, Vacio, Modal, Campo, Stepper, useAccion, SelectorBodega, SelectorPresentacion } from '../ui.jsx';
+import { BotonFoto, FotosPendientes, Imagen } from '../soportes.jsx';
 
 export function Compras({ user }) {
   const { bodegas } = useUbicaciones();
   const [bodegaF, setBodegaF] = useState('');
   const s = useCarga(() => get(`/compras${bodegaF ? `?bodega_id=${bodegaF}` : ''}`), [bodegaF]);
   const prov = useCarga(() => get('/proveedores'), []);
-  const [nueva, setNueva] = useState(false);
+  const [nueva, setNueva] = useState(() => location.hash.includes('nueva=1')); // «Ingresar factura» desde Inventario
   const [det, setDet] = useState(null);
   const [nprov, setNprov] = useState(false);
   const [ocupado, run] = useAccion();
@@ -32,6 +33,9 @@ export function Compras({ user }) {
         <div className="mut">{det.fecha.slice(0, 16)} · {det.proveedor || 'Sin proveedor'} · Bodega {det.bodega}</div>
         <table className="t"><tbody>{det.items.map((i) => <tr key={i.id}><td>{i.nombre}{i.presentacion ? ` (${i.presentacion})` : ''}</td><td className="n">{qty(i.cantidad)} × {money(i.costo)}</td></tr>)}</tbody></table>
         <div className="right big">{money(det.total)}</div><div className="right mut">Pagado {money(det.pagado)}</div>
+        <h3 style={{ marginBottom: 6 }}>Foto de la factura</h3>
+        {det.fotos?.length > 0 ? <div className="fotos">{det.fotos.map((f) => <Imagen key={f.id} url={`/compras/${det.id}/foto/${f.id}`} alt="Factura" />)}</div> : <div className="mut">Sin foto adjunta</div>}
+        {(det.fotos?.length || 0) < 5 && <div style={{ marginTop: 8 }}><BotonFoto texto="📷 Agregar foto de la factura" onFoto={async (img) => { await post(`/compras/${det.id}/foto`, { imagen: img }); setDet(await get(`/compras/${det.id}`)); }} /></div>}
         {can(user, 'pagar_proveedores') && !det.anulada && det.total - det.pagado > 0.5 && <button className="btn block" style={{ marginTop: 8 }} disabled={ocupado} onClick={() => { const v = window.prompt('Valor del pago al proveedor', Math.round(det.total - det.pagado)); if (v) run(async () => { await post(`/compras/${det.id}/pago`, { valor: Number(v) }); setDet(null); s.recargar(); prov.recargar(); }, 'Pago registrado'); }}>Registrar pago</button>}
         {can(user, 'pagar_proveedores') && !det.anulada && <button className="btn peligro block" style={{ marginTop: 8 }} disabled={ocupado} onClick={() => { if (window.confirm('¿Anular la compra? Se descuenta el inventario que entró.')) run(async () => { await post(`/compras/${det.id}/anular`); setDet(null); s.recargar(); }, 'Compra anulada'); }}>Anular compra</button>}
       </Modal>}
@@ -45,6 +49,7 @@ function NuevaCompra({ user, bodegas, proveedores, onClose, onHecho }) {
   const [prov, setProv] = useState('');
   const [factura, setFactura] = useState('');
   const [pagado, setPagado] = useState('');
+  const [fotos, setFotos] = useState([]);
   const [q, setQ] = useState('');
   const [ocupado, run] = useAccion();
   const lista = (prods.data || []).filter((p) => p.activo && p.nombre.toLowerCase().includes(q.toLowerCase()));
@@ -56,6 +61,10 @@ function NuevaCompra({ user, bodegas, proveedores, onClose, onHecho }) {
         : <div className="mut" style={{ marginBottom: 10 }}>Llega a tu bodega: <b>{nombreBodega(bodegas, user.bodega_id)}</b></div>}
       <label className="f">Proveedor<select value={prov} onChange={(e) => setProv(e.target.value)}><option value="">Sin proveedor</option>{proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select></label>
       <Campo label="No. factura del proveedor (opcional)" value={factura} onChange={(e) => setFactura(e.target.value)} />
+      <div style={{ marginBottom: 10 }}>
+        <FotosPendientes fotos={fotos} onQuitar={(i) => setFotos(fotos.filter((_, k) => k !== i))} />
+        {fotos.length < 5 && <BotonFoto texto="📷 Foto de la factura (opcional)" onFoto={(img) => setFotos([...fotos, img])} />}
+      </div>
       <input className="q" placeholder="Buscar producto…" value={q} onChange={(e) => setQ(e.target.value)} />
       {lista.map((p) => {
         const v = it[p.id];
@@ -73,7 +82,7 @@ function NuevaCompra({ user, bodegas, proveedores, onClose, onHecho }) {
       })}
       <Campo label={`Pagado ahora (vacío = pagó todo ${money(total)})`} inputMode="decimal" value={pagado} onChange={(e) => setPagado(e.target.value)} />
       <div className="row between"><b>Total</b><span className="big">{money(total)}</span></div>
-      <button className="btn block" style={{ marginTop: 8 }} disabled={ocupado || !items.length || !bodega} onClick={() => run(async () => { await post('/compras', { bodega_id: Number(bodega), proveedor_id: prov || null, factura, pagado: pagado === '' ? undefined : Number(pagado), items }); onHecho(); }, 'Compra registrada · inventario actualizado')}>Guardar compra</button>
+      <button className="btn block" style={{ marginTop: 8 }} disabled={ocupado || !items.length || !bodega} onClick={() => run(async () => { await post('/compras', { bodega_id: Number(bodega), proveedor_id: prov || null, factura, pagado: pagado === '' ? undefined : Number(pagado), fotos: fotos.length ? fotos : undefined, items }); onHecho(); }, 'Compra registrada · inventario actualizado')}>Guardar compra</button>
     </Modal>
   );
 }

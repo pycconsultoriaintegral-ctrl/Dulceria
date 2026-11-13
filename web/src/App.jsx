@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getUser, getToken, guardarSesion, login, get, useHash, sincronizar, useCola, can } from './lib.js';
+import { getUser, getToken, guardarSesion, login, get, useHash, sincronizar, useCola, can, precargar } from './lib.js';
 import { Toaster, Campo, useAccion, toast, VisorPdf, Header } from './ui.jsx';
 import { Inicio } from './pages/Inicio.jsx';
 import Vender from './pages/Vender.jsx';
@@ -15,6 +15,8 @@ import { Importar } from './pages/Importar.jsx';
 import { Actividad } from './pages/Actividad.jsx';
 import { Cierre } from './pages/Cierre.jsx';
 import { Turno } from './pages/Turno.jsx';
+import { Kardex } from './pages/Kardex.jsx';
+import { MapaPage } from './pages/Mapa.jsx';
 import { Mas } from './pages/Mas.jsx';
 import { Aprobaciones } from './pages/Aprobaciones.jsx';
 import { Impresora } from './pages/Impresora.jsx';
@@ -53,10 +55,10 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    cargarCfg(); sincronizar();
+    cargarCfg(); sincronizar(); precargar(user);
     // refresca los datos del usuario (rol, ruta, bodega) por si el administrador los cambió
     get('/auth/me').then((me) => { guardarSesion(getToken(), me); setUser(me); }).catch(() => {});
-    const on = () => { setOnline(true); sincronizar(); }, off = () => setOnline(false);
+    const on = () => { setOnline(true); sincronizar(); precargar(user); }, off = () => setOnline(false);
     addEventListener('online', on); addEventListener('offline', off);
     const t = setInterval(sincronizar, 30000);
     return () => { removeEventListener('online', on); removeEventListener('offline', off); clearInterval(t); };
@@ -78,6 +80,8 @@ export default function App() {
     case 'cuadre-semanal': page = can(user, 'cuadre') ? <CuadreSemanal key={id || 'lista'} punto={id} /> : sinAcceso; break;
     case 'inventario': page = <Inventario {...p} />; break;
     case 'cierre': page = <Cierre {...p} />; break;
+    case 'kardex': page = can(user, 'inventario') ? <Kardex /> : sinAcceso; break;
+    case 'mapa': page = <MapaPage user={user} />; break;
     case 'turno': page = can(user, 'vender') ? <Turno {...p} /> : sinAcceso; break;
     case 'productos': page = can(user, 'productos') ? <Productos /> : sinAcceso; break;
     case 'compras': page = can(user, 'compras') || can(user, 'pagar_proveedores') ? <Compras user={user} /> : sinAcceso; break;
@@ -90,10 +94,10 @@ export default function App() {
     default: page = <Inicio {...p} />;
   }
   const tabs = [['', '🏠', 'Inicio'], ['vender', '🛒', 'Vender'], ['remisiones', '🧾', 'Remisiones'], ['clientes', '👥', 'Clientes'], ['inventario', '📦', 'Inventario'], ['mas', '☰', 'Más']];
-  const activo = ['productos', 'compras', 'reportes', 'ajustes', 'cartera', 'cierre', 'turno', 'traslados', 'importar', 'actividad', 'aprobaciones', 'impresora', 'cuadre-semanal', 'alertas'].includes(base) ? 'mas' : base || '';
+  const activo = ['productos', 'compras', 'reportes', 'ajustes', 'cartera', 'cierre', 'turno', 'kardex', 'mapa', 'traslados', 'importar', 'actividad', 'aprobaciones', 'impresora', 'cuadre-semanal', 'alertas'].includes(base) ? 'mas' : base || '';
   return (
     <>
-      {!online && <div className="banner off">Sin conexión · tus ventas se guardan y se envían al volver la señal</div>}
+      {!online && <div className="banner off">Sin conexión · ves los datos de tu última conexión; tus ventas se guardan y se envían al volver la señal</div>}
       {online && pendientes.length > 0 && <div className="banner off">Enviando {pendientes.length} operación(es) pendientes…</div>}
       {page}
       <nav className="tabs">{tabs.map(([to, ic, t]) => <a key={t} href={`#/${to}`} className={activo === to ? 'on' : ''}><b>{ic}</b>{t}</a>)}</nav>

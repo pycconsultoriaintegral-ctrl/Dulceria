@@ -25,15 +25,20 @@ export function Inventario({ user }) {
           <label className="f">Ver inventario de
             <select value={ub} onChange={(e) => { setUb(e.target.value); setQ(''); }}>
               <option value="resumen">📊 Resumen general</option>
-              {bodegas.map((b) => (
+              {bodegas.filter((b) => b.activa).map((b) => (
                 <optgroup key={b.id} label={b.nombre}>
                   <option value={`B${b.id}`}>{conPrefijo('Bodega', b.nombre)}</option>
-                  {b.rutas.map((r) => <option key={r.id} value={`R${r.id}`}>{conPrefijo('Ruta', r.nombre)}</option>)}
+                  {b.rutas.filter((r) => r.activa).map((r) => <option key={r.id} value={`R${r.id}`}>{conPrefijo('Ruta', r.nombre)}</option>)}
                 </optgroup>
               ))}
             </select>
           </label>
         )}
+        {gestiona && (
+          <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+            {(can(user, 'compras') || can(user, 'pagar_proveedores')) && <button className="btn grow" onClick={() => ir('/compras?nueva=1')}>📥 Ingresar factura</button>}
+            <button className="btn sec grow" onClick={() => ir(`/kardex${ub !== 'resumen' ? `?ub=${ub}` : ''}`)}>📒 Kardex general</button>
+          </div>)}
         {gestiona && porRecibir.length > 0 && (
           <div className="card" style={{ borderColor: 'var(--oro)', cursor: 'pointer' }} onClick={() => ir('/traslados')}>
             <b>📦 {porRecibir.length} traslado(s) en camino</b><div className="mut">Toca para ver y recibir</div>
@@ -62,7 +67,8 @@ export function Inventario({ user }) {
                     </div>
                     <div className="right"><b className={p.total <= 0 ? 'mal' : ''}>{qty(p.total)}</b> <span className="mut">{p.unidad}</span>
                       {desglose(p.total, p.presentaciones, p.unidad) && <div className="mut">{desglose(p.total, p.presentaciones, p.unidad)}</div>}
-                      {p.costo !== undefined && <div className="mut">{money(p.total * p.costo)}</div>}</div>
+                      {p.costo !== undefined && <div className="mut">{money(p.total * p.costo)}</div>}
+                      {gestiona && <button className="btn sm gris" onClick={() => ir(`/kardex?q=${encodeURIComponent(p.nombre)}`)}>📒 Kardex</button>}</div>
                   </div>
                 ))}
               </div>
@@ -75,7 +81,7 @@ export function Inventario({ user }) {
                     <div key={p.id} className="item" onClick={() => gestiona && setAjuste({ p, ub: d.ub, actual: c })}>
                       <div className="grow"><div className="bold">{p.nombre}</div>{p.costo !== undefined && <div className="mut">Costo {money(p.costo)} · valor {money(c * p.costo)}</div>}</div>
                       <div className="right"><b className={c <= 0 ? 'mal' : bajo ? 'warn' : ''}>{qty(c)}</b> <span className="mut">{p.unidad}</span>{desglose(c, p.presentaciones, p.unidad) && <div className="mut">{desglose(c, p.presentaciones, p.unidad)}</div>}{bajo && <div className="tag warn">Reponer</div>}</div>
-                      {gestiona && <button className="btn sm gris" onClick={(e) => { e.stopPropagation(); setKardex({ p, ub: d.ub }); }}>Kardex</button>}
+                      {gestiona && <button className="btn sm sec" onClick={(e) => { e.stopPropagation(); setKardex({ p, ub: d.ub }); }}>📒 Kardex</button>}
                     </div>
                   );
                 })}

@@ -6,6 +6,7 @@ import { wrap, r2, conPrefijo } from '../util.js';
 import { sqlAlcance, exigir, can, parseUb, getRuta, getBodega } from '../scope.js';
 import { libro, MIME_XLSX } from '../xlsx.js';
 import { alertasInventario } from '../alertas.js';
+import { consultarKardex } from './inventario.js';
 
 const router = Router();
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -52,6 +53,17 @@ const sumaCol = (filas, i) => filas.reduce((a, f) => a + (Number(f[i]) || 0), 0)
 const cociente = (a, b) => (b ? r2(a / b * 10000) / 10000 : null);
 
 // ---------- Vendedores ----------
+// Kardex general en Excel (mismos filtros que la pantalla)
+router.get('/informes/kardex.xlsx', wrap((req, res) => {
+  const { filas, truncado } = consultarKardex(req.user, req.query, 20000);
+  res.setHeader('Content-Type', MIME_XLSX);
+  res.setHeader('Content-Disposition', 'attachment; filename="kardex.xlsx"');
+  res.send(libro([{ nombre: 'Kardex', titulo: 'Kardex de inventario', subtitulo: `${req.query.desde || 'inicio'} a ${req.query.hasta || 'hoy'}${truncado ? ' · se muestran los primeros 20.000 movimientos' : ''}`,
+    columnas: [{ titulo: 'Fecha', ancho: 18 }, { titulo: 'Producto', ancho: 36 }, { titulo: 'Código', ancho: 10 }, { titulo: 'Lugar', ancho: 24 }, { titulo: 'Movimiento', ancho: 18 },
+      { titulo: 'Cantidad', tipo: 'entero', ancho: 11 }, { titulo: 'Saldo', tipo: 'entero', ancho: 11 }, { titulo: 'Costo', tipo: 'moneda', ancho: 12 }, { titulo: 'Referencia', ancho: 14 }, { titulo: 'Nota', ancho: 30 }, { titulo: 'Usuario', ancho: 18 }],
+    filas: filas.map((m) => [m.fecha, m.producto, m.codigo || '', m.lugar, m.tipo.replaceAll('_', ' '), m.cantidad, m.saldo, m.costo, m.referencia || '', m.nota || '', m.usuario || '']) }]));
+}));
+
 // Catálogo para editar en Excel y volver a importar (Más → Importar → Productos): se actualiza lo que cambie, por código o nombre
 router.get('/informes/catalogo.xlsx', wrap((req, res) => {
   exigir(can(req.user, 'productos'), 'No tienes permiso para editar productos');

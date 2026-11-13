@@ -150,7 +150,7 @@ export function SelectorPunto({ bodegas, value, onChange, label = 'Punto de vent
     <label className="f">{label}
       <select value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">{todos ? 'Todos' : vacio}</option>
-        {bodegas.map((b) => (
+        {bodegas.filter((b) => b.activa).map((b) => (
           <optgroup key={b.id} label={b.nombre}>
             {mostrador && b.puede_mostrador && <option value={`B${b.id}`}>Mostrador · {b.nombre}</option>}
             {b.rutas.filter((r) => r.activa).map((r) => <option key={r.id} value={`R${r.id}`}>{conPrefijo('Ruta', r.nombre)}</option>)}
