@@ -74,6 +74,12 @@ test('mapa de ventas y de tiendas, por alcance', async () => {
   assert.equal((await call('GET', '/mapa/ventas', null, ctx.nico)).body.con_ubicacion, 1);
   assert.equal((await call('GET', '/mapa/ventas', null, ctx.vera)).body.total_ventas, 0);
   assert.equal((await call('GET', '/mapa/ventas?fecha=2000-01-01', null, ctx.admin)).body.total_ventas, 0);
+  // una venta de cliente que paga antes (pendiente de aprobación) también sale en el mapa, marcada como pendiente
+  await call('PUT', `/clientes/${ctx.cli2}`, { nombre: 'Tienda Sin Mapa', paga_antes: 1 }, ctx.admin);
+  await call('POST', '/remisiones', { cliente_id: ctx.cli2, tipo_pago: 'contado', lat: 7.9, lng: -76.7, items: [{ producto_id: ctx.pan, cantidad: 1 }] }, ctx.nico);
+  const m2 = (await call('GET', '/mapa/ventas', null, ctx.admin)).body;
+  assert.equal(m2.con_ubicacion, 2);
+  assert.deepEqual(m2.ventas.map((v) => v.pendiente), [false, true]);
   // tiendas
   const c = (await call('GET', '/mapa/clientes', null, ctx.admin)).body;
   assert.equal(c.con_ubicacion, 1);

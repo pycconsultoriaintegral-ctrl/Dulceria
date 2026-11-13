@@ -6,19 +6,19 @@ import { sqlAlcance, exigir, can, puedeRuta } from '../scope.js';
 
 const router = Router();
 
-// Ventas del día con ubicación. Quien tiene informes ve las de su alcance; el vendedor, las suyas.
+// Ventas del día con ubicación (las que esperan aprobación del pago también salen, marcadas como pendientes). Quien tiene informes ve las de su alcance; el vendedor, las suyas.
 router.get('/ventas', wrap((req, res) => {
   const u = req.user;
   exigir(can(u, 'informes') || u.alcance === 'ruta', 'No tienes permiso para ver el mapa de ventas');
   const fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.fecha)) ? req.query.fecha : ahora().slice(0, 10);
   const alcance = sqlAlcance(u, 'r', { punto: req.query.punto || undefined });
   const propias = can(u, 'informes') ? '1=1' : `r.usuario_id=${Number(u.id)}`;
-  const filas = db.prepare(`SELECT r.id, r.consecutivo, r.fecha, r.total, r.tipo_pago, r.lat, r.lng, r.gps_precision, c.nombre AS cliente, us.id AS vendedor_id, us.nombre AS vendedor,
+  const filas = db.prepare(`SELECT r.id, r.consecutivo, r.fecha, r.total, r.anulada, r.tipo_pago, r.lat, r.lng, r.gps_precision, c.nombre AS cliente, us.id AS vendedor_id, us.nombre AS vendedor,
       CASE WHEN ru.id IS NULL THEN 'Mostrador' ELSE ru.nombre END AS punto
     FROM remisiones r JOIN clientes c ON c.id=r.cliente_id JOIN usuarios us ON us.id=r.usuario_id LEFT JOIN rutas ru ON ru.id=r.ruta_id
-    WHERE r.anulada=0 AND r.lat IS NOT NULL AND substr(r.fecha,1,10)=? AND ${alcance} AND ${propias} ORDER BY r.fecha`).all(fecha);
-  const total = db.prepare(`SELECT COUNT(*) AS n FROM remisiones r WHERE r.anulada=0 AND substr(r.fecha,1,10)=? AND ${alcance} AND ${propias}`).get(fecha).n;
-  res.json({ fecha, con_ubicacion: filas.length, total_ventas: total, ventas: filas.map((f) => ({ ...f, total: r2(f.total) })) });
+    WHERE r.anulada IN (0, 2) AND r.lat IS NOT NULL AND substr(r.fecha,1,10)=? AND ${alcance} AND ${propias} ORDER BY r.fecha`).all(fecha);
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM remisiones r WHERE r.anulada IN (0, 2) AND substr(r.fecha,1,10)=? AND ${alcance} AND ${propias}`).get(fecha).n;
+  res.json({ fecha, con_ubicacion: filas.length, total_ventas: total, ventas: filas.map(({ anulada, ...f }) => ({ ...f, total: r2(f.total), pendiente: anulada === 2 })) });
 }));
 
 // Tiendas con ubicación guardada, dentro del alcance del usuario
