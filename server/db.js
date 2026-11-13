@@ -65,6 +65,10 @@ const DDL = {
   soportes: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, remision_id INTEGER NOT NULL REFERENCES remisiones(id), fecha TEXT NOT NULL, usuario_id INTEGER,
     mime TEXT NOT NULL, bytes INTEGER NOT NULL, huella TEXT NOT NULL, datos BLOB NOT NULL, nota TEXT)`,
+  // Foto de la factura del proveedor adjunta a una compra (se guarda en la base: entra en la copia de seguridad)
+  compra_fotos: (t) => `CREATE TABLE ${t} (
+    id INTEGER PRIMARY KEY, compra_id INTEGER NOT NULL REFERENCES compras(id), fecha TEXT NOT NULL, usuario_id INTEGER,
+    mime TEXT NOT NULL, bytes INTEGER NOT NULL, datos BLOB NOT NULL)`,
   remision_items: (t) => `CREATE TABLE ${t} (
     id INTEGER PRIMARY KEY, remision_id INTEGER NOT NULL REFERENCES remisiones(id), producto_id INTEGER NOT NULL REFERENCES productos(id),
     descripcion TEXT NOT NULL, cantidad REAL NOT NULL, precio REAL NOT NULL, costo REAL NOT NULL DEFAULT 0,
@@ -110,7 +114,7 @@ const DDL = {
     id INTEGER PRIMARY KEY, traslado_id INTEGER NOT NULL REFERENCES traslados(id),
     producto_id INTEGER NOT NULL REFERENCES productos(id), cantidad REAL NOT NULL, cantidad_recibida REAL)`,
 };
-const ORDEN = ['config', 'bodegas', 'rutas', 'roles', 'usuarios', 'productos', 'presentaciones', 'stock', 'movimientos', 'proveedores', 'compras', 'compra_items',
+const ORDEN = ['config', 'bodegas', 'rutas', 'roles', 'usuarios', 'productos', 'presentaciones', 'stock', 'movimientos', 'proveedores', 'compras', 'compra_items', 'compra_fotos',
   'clientes', 'remisiones', 'soportes', 'remision_items', 'pagos', 'gastos', 'cierres', 'turnos', 'cuadres', 'envios_whatsapp', 'traslados', 'traslado_items', 'auditoria'];
 const INDICES = ['CREATE INDEX IF NOT EXISTS ix_mov_prod ON movimientos(producto_id, fecha)',
   'CREATE INDEX IF NOT EXISTS ix_rem_fecha ON remisiones(fecha)', 'CREATE INDEX IF NOT EXISTS ix_pagos_fecha ON pagos(fecha)', 'CREATE INDEX IF NOT EXISTS ix_aud_fecha ON auditoria(fecha)',
